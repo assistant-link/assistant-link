@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Clones the component repositories into this repository's directory: backend/, cli/, apple/.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/clone [--locked]
+
+Clones backend, cli, and apple next to this script's repository, tracking main.
+Missing repositories are cloned; existing checkouts are left alone.
+
+  --locked   Check out the commits pinned in repos.lock. Existing checkouts move to
+             the pinned commit only if they have no uncommitted changes.
+
+ASSISTANT_LINK_GIT_BASE overrides where repositories are cloned from
+(default https://github.com/assistant-link), for example git@github.com:assistant-link
+or the owner of your forks.
+USAGE
+}
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+base="${ASSISTANT_LINK_GIT_BASE:-https://github.com/assistant-link}"
+lockfile="$root/repos.lock"
+repos=(backend cli apple)
+locked=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --locked) locked=true ;;
+    -h | --help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+
+pinned_sha() {
+  [[ -f "$lockfile" ]] || return 0
+  awk -v repo="$1" '$1 == repo { print $2 }' "$lockfile"
+}
+
+status=0
+for repo in "${repos[@]}"; do
+  dir="$root/$repo"
+  cloned=false
+  if [[ -e "$dir/.git" ]]; then
+    echo "$repo: already cloned, left alone"
+  elif [[ -e "$dir" ]]; then
+    echo "$repo: $dir exists but is not a git checkout, skipped" >&2
+    status=1
+    continue
+  else
+    git clone --quiet "$base/$repo.git" "$dir"
+    echo "$repo: cloned $base/$repo.git"
+    cloned=true
+  fi
+
+  $locked || continue
+  sha="$(pinned_sha "$repo")"
+  if [[ -z "$sha" ]]; then
+    echo "$repo: no entry in repos.lock" >&2
+    status=1
+  elif [[ "$(git -C "$dir" rev-parse HEAD)" == "$sha" ]]; then
+    echo "$repo: at locked commit $sha"
+  elif ! $cloned && [[ -n "$(git -C "$dir" status --porcelain)" ]]; then
+    echo "$repo: has uncommitted changes, not moved to locked commit $sha" >&2
+    status=1
+  else
+    git -C "$dir" cat-file -e "$sha^{commit}" 2>/dev/null || git -C "$dir" fetch --quiet origin "$sha"
+    git -C "$dir" checkout --quiet --detach "$sha"
+    echo "$repo: checked out locked commit $sha"
+  fi
+done
+exit "$status"

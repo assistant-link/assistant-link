@@ -1,0 +1,15 @@
+# Every tool needed to build all the components. Each component repository pins its own subset in its own mise.toml;
+# keep the versions here the same as theirs.
+[tools]
+erlang = "29.1.1"
+elixir = "1.20.4-otp-29"
+rust = "1.98.1"
+xcodegen = { version = "2.46.0", os = ["macos"] }
+
+[tasks.clone]
+description = "Clone backend, cli, and apple next to this repository (--locked checks out repos.lock)"
+run = "scripts/clone"
+
+[tasks."test:integration"]
+description = "Run the cross-repo smoke test against a local backend"
+run = "tests/integration/smoke.sh"

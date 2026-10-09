@@ -1,0 +1,6 @@
+# Commits checked out by `scripts/clone --locked` (`mise run clone --locked`): one line per repository,
+# "<name> <full commit SHA>". Without --locked, scripts/clone tracks each repository's main branch.
+# To pin the commits you have checked out: for r in backend cli apple; do echo "$r $(git -C $r rev-parse HEAD)"; done
+backend a334defaa7d8de91a18dbd21bc2e736b1718154b
+cli cfa1a3d308159c6258f4245752b99c3b1bb53919
+apple 6ec4ea4b6318b6e4ce3e57fe574ff3f4cc000779

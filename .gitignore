@@ -1,0 +1,11 @@
+# Component repositories, cloned by scripts/clone. Each is its own git repository.
+/backend/
+/cli/
+/apple/
+
+# Editor and local state.
+.expert/
+.env
+.env.*
+.DS_Store
+.claude/worktrees/
