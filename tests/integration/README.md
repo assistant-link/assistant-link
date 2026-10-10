@@ -5,8 +5,8 @@ stay in its repository; these cover what only shows up when the pieces talk to e
 
 ## smoke.sh
 
-Starts the backend from `backend/` with its production configuration against a local Postgres, checks `/health`,
-builds `al` from `cli/`, and runs it against that backend as far as it goes without the app:
+Starts the backend from `components/backend/` with its production configuration against a local Postgres, checks
+`/health`, builds `al` from `components/cli/`, and runs it against that backend as far as it goes without the app:
 
 1. creates an account, an Assistant, a Link, and a pairing code through the client API, as the app would;
 2. `al pair` with that code, then `al status`;
@@ -23,7 +23,7 @@ It needs the components cloned (`mise run clone`), the tools from `mise install`
 `DATABASE_URL` (default `ecto://postgres:postgres@localhost:5432/assistant_link_smoke`; the database is created if
 missing). The backend listens on port 4100 (`SMOKE_PORT`), so it does not clash with a dev server on 4000.
 
-CI runs it on every pull request, on every push to `main`, and daily, against each component's `main`
+CI runs it on every pull request and on every push to `main`, against each component's `main`
 ([`.github/workflows/integration.yml`](../../.github/workflows/integration.yml)).
 
 ## Adding a test

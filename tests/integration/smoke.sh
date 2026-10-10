@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Smoke test across repositories: starts the backend from ./backend with its production config against a local
-# Postgres, checks /health, then builds `al` from ./cli and takes it as far as it goes without the app. The client API
-# calls the app would make (account, Assistant, Link, pairing code) are made with curl.
+# Smoke test across repositories: starts the backend from components/backend with its production config against a
+# local Postgres, checks /health, then builds `al` from components/cli and takes it as far as it goes without the app.
+# The client API calls the app would make (account, Assistant, Link, pairing code) are made with curl.
 #
 # Needs: the components cloned (`mise run clone`), Erlang/Elixir and Rust (`mise install`), curl, jq, and a Postgres
 # that DATABASE_URL can reach and create a database on.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+components="$root/components"
 port="${SMOKE_PORT:-4100}"
 service="http://localhost:$port"
 export DATABASE_URL="${DATABASE_URL:-ecto://postgres:postgres@localhost:5432/assistant_link_smoke}"
@@ -43,7 +44,7 @@ eventually() {
 }
 
 for repo in backend cli; do
-  [[ -d "$root/$repo/.git" ]] || fail "$repo/ is missing; run scripts/clone first"
+  [[ -d "$components/$repo/.git" ]] || fail "components/$repo/ is missing; run scripts/clone first"
 done
 
 # The backend runs as in production (MIX_ENV=prod, config/runtime.exs), configured the way a self-hosted service on
@@ -59,7 +60,7 @@ export SECRET_KEY_BASE="${SECRET_KEY_BASE:-smoke-test-secret-key-base-smoke-test
 
 step "backend: build and migrate"
 (
-  cd "$root/backend"
+  cd "$components/backend"
   mix deps.get --only prod
   mix compile
   mix ecto.create
@@ -67,7 +68,7 @@ step "backend: build and migrate"
 )
 
 step "backend: start on $service"
-(cd "$root/backend" && exec mix phx.server) >"$work/server.log" 2>&1 &
+(cd "$components/backend" && exec mix phx.server) >"$work/server.log" 2>&1 &
 server_pid=$!
 
 step "backend: GET /health"
@@ -76,8 +77,8 @@ eventually 'curl -fsS "$service/health" >"$work/health.json" 2>/dev/null' 90 || 
 echo "health: $(cat "$work/health.json")"
 
 step "cli: build al"
-(cd "$root/cli" && cargo build --quiet)
-al="$root/cli/target/debug/al"
+(cd "$components/cli" && cargo build --quiet)
+al="$components/cli/target/debug/al"
 "$al" --version
 
 # The app's side of pairing, through the client API.

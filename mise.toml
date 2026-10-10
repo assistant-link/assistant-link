@@ -7,7 +7,7 @@ rust = "1.98.1"
 xcodegen = { version = "2.46.0", os = ["macos"] }
 
 [tasks.clone]
-description = "Clone backend, cli, and apple next to this repository (--locked checks out repos.lock)"
+description = "Clone backend, cli, and apple into components/"
 run = "scripts/clone"
 
 [tasks."test:integration"]

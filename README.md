@@ -18,14 +18,13 @@ This repository is the entry point to the project. Each component lives in its o
 
 This repository holds what spans them:
 
-- [`scripts/clone`](scripts/clone): clones the component repositories into this one, so you work on all of them from
-  a single directory.
+- [`scripts/clone`](scripts/clone): clones the component repositories into [`components/`](components/), so you work
+  on all of them from a single directory.
 - [`tests/integration/`](tests/integration/): tests that run the components together.
-- [`openspec/`](openspec/): proposals for changes that span several components, planned with
-  [OpenSpec](https://github.com/Fission-AI/OpenSpec). A change to one component is proposed in that component's own
-  `openspec/`.
-- [`docs/`](docs/): the [product spec](docs/product/high-level-spec.md), [product Q&A](docs/product/qa.md), and
-  [engineering principles](docs/engineering/principles.md).
+- [`openspec/`](openspec/): proposals for every change, whether it touches one component or several, planned with
+  [OpenSpec](https://github.com/Fission-AI/OpenSpec).
+- [`docs/`](docs/): the [product spec](docs/product/high-level-spec.md), [product Q&A](docs/product/qa.md),
+  [engineering principles](docs/engineering/principles.md), and [how to make changes](docs/engineering/how-to-make-changes.md).
 
 ## Getting started
 
@@ -43,8 +42,8 @@ pointed at a local or self-hosted service instead.
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) (every commit needs a DCO sign-off), and report
-vulnerabilities as described in [SECURITY.md](SECURITY.md).
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[how to make changes](docs/engineering/how-to-make-changes.md), and report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
 The code in every Assistant Link repository is licensed under the [MIT License](LICENSE). The Assistant Link name and
 app icon are not; see [TRADEMARK.md](TRADEMARK.md).
