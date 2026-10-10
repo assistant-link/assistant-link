@@ -1,7 +1,6 @@
 # Component repositories, cloned by scripts/clone. Each is its own git repository.
-/backend/
-/cli/
-/apple/
+/components/*
+!/components/README.md
 
 # Editor and local state.
 .expert/

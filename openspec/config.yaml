@@ -7,13 +7,13 @@ context: |
   notifications, structured requests, and device actions on the iPhone).
   Source of truth for product intent: docs/product/high-level-spec.md
 
-  This repository: assistant-link. Proposals here are cross-cutting:
-  they change more than one component repository.
+  This repository: assistant-link. Every change is proposed here, including
+  a change to a single component repository.
 
-  Repositories (github.com/assistant-link), cloned side by side as
-  assistant-link/{backend,cli,apple} by assistant-link's scripts/clone:
-  - assistant-link: entry point, cross-repo integration tests, cross-cutting
-    OpenSpec proposals, product and engineering docs.
+  Repositories (github.com/assistant-link), cloned into
+  assistant-link/components/{backend,cli,apple} by assistant-link's scripts/clone:
+  - assistant-link: entry point, cross-repo integration tests, OpenSpec
+    proposals for every repository, product and engineering docs.
   - backend: the service, the ALP spec (docs/alp/v1.md), self-hosting (deploy/).
   - cli: `al`, the agent-side CLI.
   - apple: the iOS app (later macOS and watchOS).
@@ -43,7 +43,7 @@ context: |
 
   The Assistant Link Protocol (ALP) is the wire protocol between the agent and the service.
   It should be designed with care to provide a good stable API for easy agent integration, and to allow for future evolution of the protocol without breaking existing agents.
-  The current spec is docs/alp/v1.md in the backend repository (backend/docs/alp/v1.md).
+  The current spec is docs/alp/v1.md in the backend repository (components/backend/docs/alp/v1.md).
 
   Clarifications: see docs/product/qa.md.
   Engineering principles (follow them): see docs/engineering/principles.md.

@@ -30,16 +30,18 @@ mise install
 mise run clone
 ```
 
-`mise run clone` runs [`scripts/clone`](../scripts/clone), which clones the component repositories into this directory:
+`mise run clone` runs [`scripts/clone`](../scripts/clone), which clones the component repositories into
+[`components/`](../components/):
 
 ```
 assistant-link/          this repository
-├── backend/             github.com/assistant-link/backend
-├── cli/                 github.com/assistant-link/cli
-└── apple/               github.com/assistant-link/apple
+└── components/
+    ├── backend/         github.com/assistant-link/backend
+    ├── cli/             github.com/assistant-link/cli
+    └── apple/           github.com/assistant-link/apple
 ```
 
-Each component is its own git repository, ignored by this one: you commit, branch, and push in each one separately.
+Each component is its own git repository, ignored by this one. See [how to make changes](engineering/how-to-make-changes.md).
 The script is safe to run again at any time. It clones only what is missing, leaves existing checkouts alone, and
 prints what it did:
 
@@ -49,15 +51,8 @@ cli: already cloned, left alone
 apple: cloned https://github.com/assistant-link/apple.git
 ```
 
-By default every component tracks its `main` branch. To get a combination of commits known to work together, use the
-commits pinned in [`repos.lock`](../repos.lock):
-
-```sh
-mise run clone --locked
-```
-
-That checks out each pinned commit, detached. An existing checkout with uncommitted changes is left where it is, with
-a warning. To work from your forks, or to clone over SSH, set where the repositories come from:
+Every component tracks its `main` branch. To work from your forks, or to clone over SSH, set where the repositories
+come from:
 
 ```sh
 ASSISTANT_LINK_GIT_BASE=git@github.com:your-user mise run clone
@@ -68,7 +63,7 @@ Run `mise trust` once in each component the first time you use mise there.
 
 ## Run everything together
 
-1. **The service.** In `backend/`:
+1. **The service.** In `components/backend/`:
 
    ```sh
    mise exec -- mix setup
@@ -78,7 +73,7 @@ Run `mise trust` once in each component the first time you use mise there.
    It listens on <http://localhost:4000>; <http://localhost:4000/health> returns `{"status":"ok"}`. See the
    [backend README](https://github.com/assistant-link/backend#readme).
 
-2. **The iOS app.** In `apple/`, on macOS, run the app in the Simulator against the local service:
+2. **The iOS app.** In `components/apple/`, on macOS, run the app in the Simulator against the local service:
 
    ```sh
    make run SERVICE_URL=http://localhost:4000
@@ -87,7 +82,7 @@ Run `mise trust` once in each component the first time you use mise there.
    Create an Assistant, add a Link, and copy its pairing text. See the
    [apple README](https://github.com/assistant-link/apple#readme).
 
-3. **The agent side.** In `cli/`, build `al` and pair with the code from the pairing text:
+3. **The agent side.** In `components/cli/`, build `al` and pair with the code from the pairing text:
 
    ```sh
    make build
@@ -100,8 +95,8 @@ Run `mise trust` once in each component the first time you use mise there.
 
 ## Tests
 
-Each component has its own quality gate, which its CI runs on every pull request: `mix precommit` in `backend/`,
-`make precommit` in `cli/`, and `make lint` and `make test` in `apple/`.
+Each component has its own quality gate, which its CI runs on every pull request: `mix precommit` in
+`components/backend/`, `make precommit` in `components/cli/`, and `make lint` and `make test` in `components/apple/`.
 
 The integration tests in [`tests/integration/`](../tests/integration/) run the components together:
 
@@ -113,6 +108,7 @@ mise run test:integration
 
 - [High-level product spec](product/high-level-spec.md) and [product Q&A](product/qa.md)
 - [Engineering principles](engineering/principles.md)
+- [How to make changes](engineering/how-to-make-changes.md)
 - [Assistant Link Protocol v1](https://github.com/assistant-link/backend/blob/main/docs/alp/v1.md), for building your
   own agent integration
 - [Self-hosting the service](https://github.com/assistant-link/backend/blob/main/deploy/SELF_HOSTING.md)
