@@ -26,8 +26,8 @@ Serves V1 job **1. Reach my assistant from anywhere**. It establishes the path t
 
   It sets the conventions later slices extend: versioning, bearer-token auth, JSON-RPC methods and notifications, and error shape.
 - **Agent CLI `al` (new, Rust):** A single self-contained binary with three commands:
-  - `al pair <code>`: exchanges the code for a Link token and stores it locally.
-  - `al status`: reports pairing and whether the service accepts the connection.
+  - `al pair <code>`: exchanges the code for a Link key (its Link token) and hands it to the agent to store.
+  - `al status`: reports whether the service accepts a connection with the supplied Link key.
   - `al wait`: holds the connection open, so the Link is online, until interrupted. In later slices, it also returns incoming messages and calls.
 - **Paste-to-agent onboarding:** The pairing text points the agent at an `install.md` that walks it through installing `al`, pairing, and verifying. The approach follows the pattern of OpenSpec's `install.md`.
 
@@ -50,7 +50,7 @@ Serves V1 job **1. Reach my assistant from anywhere**. It establishes the path t
 - `assistants`: creating and listing Assistants (name, preset avatar) and showing their connection status in the app.
 - `assistant-links`: creating Assistant Links, issuing paste-to-agent pairing text with a short-lived pairing code, exchanging the code for a Link token, and showing each Link's presence and last active time.
 - `alp`: the public, versioned Assistant Link Protocol contract for agents: the pairing endpoint, the JSON-RPC 2.0 agent WebSocket, authentication, versioning, and errors.
-- `agent-cli`: the `al` command-line tool's observable behavior: `pair`, `status`, `wait`, local credential storage, and exit codes.
+- `agent-cli`: the `al` command-line tool's observable behavior: `pair`, `status`, `wait`, Link key input, and exit codes.
 
 ### Modified Capabilities
 

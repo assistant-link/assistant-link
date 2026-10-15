@@ -87,8 +87,8 @@ Run `mise trust` once in each component the first time you use mise there.
    ```sh
    make build
    export AL_SERVER=http://localhost:4000
-   target/debug/al pair <code>
-   target/debug/al wait
+   target/debug/al pair <code> --key-file /tmp/al-key
+   target/debug/al wait --key-file /tmp/al-key
    ```
 
    While `al wait` runs, the app shows the Link as online. See the [cli README](https://github.com/assistant-link/cli#readme).

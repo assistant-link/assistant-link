@@ -106,19 +106,21 @@ link_status() {
 [[ "$(link_status)" == "not_paired" ]] || fail "new Link is not not_paired"
 
 export AL_SERVER="$service"
-export XDG_CONFIG_HOME="$work/config"
+key_file="$work/al-key"
 
 step "al pair"
-"$al" pair "$code" | tee "$work/pair.json"
+"$al" pair "$code" --key-file "$key_file" | tee "$work/pair.json"
+[[ -s "$key_file" ]] || fail "al pair did not write the Link key"
+[[ "$(jq -r .link_key "$work/pair.json")" == "null" ]] || fail "al pair printed the key despite --key-file"
 [[ "$(jq -r .assistant_name "$work/pair.json")" == "Smoke" ]] || fail "al pair did not report the Assistant"
 [[ "$(jq -r .link_id "$work/pair.json")" == "$link_id" ]] || fail "al pair paired another Link"
 
 step "al status"
-"$al" status | tee "$work/status.json"
+"$al" status --key-file "$key_file" | tee "$work/status.json"
 [[ "$(jq -r .check "$work/status.json")" == "accepted" ]] || fail "al status was not accepted"
 
 step "al wait: the Link goes online, then offline"
-"$al" wait >"$work/events.log" 2>"$work/wait.log" &
+AL_LINK_KEY="$(cat "$key_file")" "$al" wait >"$work/events.log" 2>"$work/wait.log" &
 wait_pid=$!
 eventually '[[ "$(link_status)" == "online" ]]' 15 || fail "Link did not go online during al wait"
 echo "online while al wait runs"
