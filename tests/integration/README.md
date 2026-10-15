@@ -9,8 +9,8 @@ Starts the backend from `components/backend/` with its production configuration 
 `/health`, builds `al` from `components/cli/`, and runs it against that backend as far as it goes without the app:
 
 1. creates an account, an Assistant, a Link, and a pairing code through the client API, as the app would;
-2. `al pair` with that code, then `al status`;
-3. `al wait`, checking that the Link goes online, and offline again once `al wait` stops;
+2. `al pair` with that code into a key file, then `al status` with that key file;
+3. `al wait` with the key in `AL_LINK_KEY`, checking that the Link goes online, and offline again once `al wait` stops;
 4. checks that `/install.md` points agents at the `cli` repository.
 
 Run it from the repository root:
