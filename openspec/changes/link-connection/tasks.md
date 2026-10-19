@@ -31,7 +31,7 @@
 - [x] 4.5 Add liveness (ping every 25 s, close after 60 s silence; intervals configurable for tests); verify with tests using short intervals that the Link goes offline
 - [x] 4.6 On account deletion, send `connection.closing` with reason `account_deleted` to that account's agent connections and close them; verify with a test that deletes an account while an agent is connected
 - [x] 4.7 Implement the app's live connection `/api/v1/connect` (a WebSocket; account credential bearer auth, subscribes to `account:<id>`, sends `link.status` incl. `last_active_at` as a JSON-RPC 2.0 notification, answers unknown methods and malformed frames with JSON-RPC errors, closes with `connection.closing` on account deletion); verify with a test that an agent connecting produces a `link.status` notification on the app's connection
-- [ ] 4.8 Write `backend/priv/static/install.md` (objective, done-when, steps: install `al` by platform, `al pair --key-file`, storing the Link key with wrapper examples for the macOS Keychain, Linux `secret-tool`, and a `0600` key file, `al status`, `al wait`, running several assistants on one host, stop conditions) and serve it at `/install.md`; verify `curl` returns it from the deployed service and a manual walkthrough of its commands against the deployed service succeeds (after group 5)
+- [x] 4.8 Write `backend/priv/static/install.md` (objective, done-when, steps: install `al` by platform, `al pair --key-file`, storing the Link key with wrapper examples for the macOS Keychain, Linux `secret-tool`, and a `0600` key file, `al status`, `al wait`, running several assistants on one host, stop conditions) and serve it at `/install.md`; verify `curl` returns it from the deployed service and a manual walkthrough of its commands against the deployed service succeeds (after group 5)
 - [x] 4.9 Add `backend/README.md` covering local setup (`mise install`, Postgres), env vars (`DATABASE_URL`, `SECRET_KEY_BASE`, `PHX_HOST`, `POOL_SIZE`), running tests, and `mix precommit`; verify by following it from a fresh clone
 
 ## 5. Agent tooling: `al` CLI (Rust)
@@ -60,6 +60,6 @@
 
 ## 7. End-to-end verification
 
-- [ ] 7.1 Run the full flow against the deployed service from a physical iPhone: create Assistant and Link in the app, paste the pairing text to an agent (e.g. Claude Code), let it follow `install.md`, confirm `al status` exits 0, the Link shows online during `al wait` and offline within 2 s after Ctrl-C with an updated last active time
-- [ ] 7.2 Verify multiple Links: pair a second Link for the same Assistant on the same host user with its own key; confirm both are listed with independent status and the first stays connected
-- [ ] 7.3 Verify failure paths end to end: expired code (`al pair` exits 4); log out in the app while `al wait` runs (it exits 4 with `account_deleted`); killing network on the agent host (Link offline within 60 s)
+- [x] 7.1 Run the full flow against the deployed service from a physical iPhone: create Assistant and Link in the app, paste the pairing text to an agent (e.g. Claude Code), let it follow `install.md`, confirm `al status` exits 0, the Link shows online during `al wait` and offline within 2 s after Ctrl-C with an updated last active time
+- [x] 7.2 Verify multiple Links: pair a second Link for the same Assistant on the same host user with its own key; confirm both are listed with independent status and the first stays connected
+- [x] 7.3 Verify failure paths end to end: expired code (`al pair` exits 4); log out in the app while `al wait` runs (it exits 4 with `account_deleted`); killing network on the agent host (Link offline within 60 s)
