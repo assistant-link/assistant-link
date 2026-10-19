@@ -62,4 +62,4 @@
 
 - [x] 7.1 Run the full flow against the deployed service from a physical iPhone: create Assistant and Link in the app, paste the pairing text to an agent (e.g. Claude Code), let it follow `install.md`, confirm `al status` exits 0, the Link shows online during `al wait` and offline within 2 s after Ctrl-C with an updated last active time
 - [x] 7.2 Verify multiple Links: pair a second Link for the same Assistant on the same host user with its own key; confirm both are listed with independent status and the first stays connected
-- [ ] 7.3 Verify failure paths end to end: expired code (`al pair` exits 4); log out in the app while `al wait` runs (it exits 4 with `account_deleted`); killing network on the agent host (Link offline within 60 s)
+- [x] 7.3 Verify failure paths end to end: expired code (`al pair` exits 4); log out in the app while `al wait` runs (it exits 4 with `account_deleted`); killing network on the agent host (Link offline within 60 s)
