@@ -11,12 +11,18 @@ The service SHALL accept a WebSocket connection at `GET /alp/v1/connect` authent
 ## ADDED Requirements
 
 ### Requirement: Event delivery request
-The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: an object with a stable `id` and a `type`, the only fields required on every event, plus the fields of its type. The type `message` has `text` and `sent_at` (RFC 3339 UTC). The JSON-RPC request `id` SHALL be the event's `id`. A result object, which MAY be empty, SHALL acknowledge the event; an error response SHALL mean the agent did not take it.
+The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: an object with a stable `id` and a `type`, the only fields required on every event, plus the fields of its type. The type `text_message` has `text` and `sent_at` (RFC 3339 UTC). Only the user's text messages are delivered in this revision. The JSON-RPC request `id` SHALL be the event's `id`.
 
 #### Scenario: Message delivered
 - **WHEN** the user sends "Hi" to an Assistant that has an online Assistant Link
-- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "event.deliver", "params": {"id": ..., "type": "message", "text": "Hi", "sent_at": ...}}`
-- **AND** the Assistant Link's cursor advances when the agent responds with `{"jsonrpc": "2.0", "id": ..., "result": {}}`
+- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "event.deliver", "params": {"id": ..., "type": "text_message", "text": "Hi", "sent_at": ...}}`
+
+### Requirement: Event acknowledgement
+A result object, which MAY be empty, SHALL acknowledge the event: the Assistant Link's cursor advances and, for the user's message, `delivered_at` is set if it was still null. An error response SHALL mean the agent did not take it.
+
+#### Scenario: Acknowledged
+- **WHEN** the agent responds to `event.deliver` with `{"jsonrpc": "2.0", "id": ..., "result": {}}`
+- **THEN** the Assistant Link's cursor advances to that event
 
 ### Requirement: Late acknowledgement
 The service SHALL accept a response for the event currently in flight as its acknowledgement even if it arrives after the 30 seconds, and SHALL ignore a response for any other id.
@@ -94,12 +100,12 @@ The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token,
 - **THEN** the service responds `401` with `unauthorized`
 
 ### Requirement: Idempotent send
-`POST /alp/v1/messages` SHALL accept an optional `client_id` (string, unique per Assistant Link). A request repeating a `client_id` SHALL respond `200` with the stored message's `{"message_id", "sent_at"}` and store nothing, unless its text differs, which SHALL be `409` `client_id_conflict`.
+`POST /alp/v1/messages` SHALL accept an optional `idempotency_key` (string, unique per Assistant Link). A request repeating an `idempotency_key` SHALL respond `200` with the stored message's `{"message_id", "sent_at"}` and store nothing, unless its text differs, which SHALL be `409` `idempotency_key_conflict`.
 
-#### Scenario: Repeated client_id
-- **WHEN** an agent posts the same `client_id` and text twice
+#### Scenario: Repeated idempotency_key
+- **WHEN** an agent posts the same `idempotency_key` and text twice
 - **THEN** the second response is `200` with the same `message_id` and the Timeline holds one message
 
-#### Scenario: Reused client_id with other text
-- **WHEN** an agent posts a `client_id` it already used with a different text
-- **THEN** the response is `409` with `client_id_conflict` and nothing is stored
+#### Scenario: Reused idempotency_key with other text
+- **WHEN** an agent posts an `idempotency_key` it already used with a different text
+- **THEN** the response is `409` with `idempotency_key_conflict` and nothing is stored

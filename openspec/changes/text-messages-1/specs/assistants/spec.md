@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Assistant list is the home screen
-The app SHALL open to a list of the user's Assistants, laid out like a messaging app's conversation list. Each entry SHALL show the Assistant's avatar, name, whether it is online, and its most recent event with that event's time. The most recent event is the latest of the Assistant's messages and its "Assistant Link created" events. A message SHALL be shown as its text on one line, truncated, with the prefix "You: " when the user sent it; a message of the user that is Not Delivered SHALL also show a red exclamation mark before the text.
+The app SHALL open to a list of the user's Assistants, laid out like a messaging app's conversation list. Each entry SHALL show the Assistant's avatar, name, whether it is online, and its most recent event with that event's time. The most recent event is the latest event of the Assistant's Timeline (a message or "Assistant Link created"), as returned by the service. A message SHALL be shown as its text on one line, truncated, with the prefix "You: " when the user sent it; a message of the user that is Not Delivered SHALL also show a red exclamation mark before the text.
 
 #### Scenario: Home screen shows Assistants
 - **WHEN** the user opens the app and has Assistants "Hermes", "Grok Bot", and "Muse"
@@ -32,7 +32,7 @@ The app SHALL open to a list of the user's Assistants, laid out like a messaging
 - **THEN** the "Hermes" entry shows "Assistant Link created"
 
 ### Requirement: Assistant screen
-Opening an Assistant SHALL show its conversation screen, headed by a bubble with the Assistant's avatar, name, and connection status. Tapping the bubble SHALL open the Assistant's details: its avatar, name, status, and Assistant Links. While the Assistant has no Assistant Links, the conversation screen SHALL guide the user to create one. Once it has at least one, the screen SHALL show the Assistant's Timeline, which holds its messages and an "Assistant Link created" system event for each of its Links, oldest first, with a composer below it (see `messages`).
+Opening an Assistant SHALL show its conversation screen, headed by a bubble with the Assistant's avatar, name, and connection status. Tapping the bubble SHALL open the Assistant's details: its avatar, name, status, and Assistant Links. While the Assistant has no Assistant Links, the conversation screen SHALL guide the user to create one. Once it has at least one, the screen SHALL show the Assistant's Timeline, which the service stores and which holds its messages and an "Assistant Link created" system event for each of its Links, written when the Link is created, oldest first, with a composer below it (see `messages`).
 
 #### Scenario: No Links yet
 - **WHEN** the user opens an Assistant that has no Assistant Links

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Log out deletes the account
-The user SHALL be able to log out from the app. Because logging out cannot be undone, the app SHALL require two separate confirmations; the second SHALL state that all Assistants, Assistant Links, and history will be permanently deleted. On confirmation the service SHALL permanently delete the account and everything it owns (Assistants, Assistant Links, Link tokens, pairing codes, messages, and the rest of the history), and SHALL disconnect any agents connected on those Links. Afterwards the app SHALL return to its first-launch state.
+The user SHALL be able to log out from the app. Because logging out cannot be undone, the app SHALL require two separate confirmations; the second SHALL state that all Assistants, Assistant Links, and history will be permanently deleted. On confirmation the service SHALL permanently delete the account and everything it owns (Assistants, Assistant Links, Link tokens, pairing codes, Timeline events with their message texts, and the rest of the history), and SHALL disconnect any agents connected on those Links. Afterwards the app SHALL return to its first-launch state.
 
 #### Scenario: Log out after two confirmations
 - **WHEN** the user taps log out, confirms, and then confirms again on the "permanently deleted" prompt

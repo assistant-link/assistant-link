@@ -52,11 +52,11 @@
 ## ADDED Requirements
 
 ### Requirement: Incoming events
-`al wait` SHALL write each incoming event (the params of `event.deliver`) to standard output as one compact JSON line, in both JSON and `--human` modes, in the order received. Every event SHALL have a `type`; later kinds SHALL use new `type` values and existing kinds SHALL only gain optional fields. A message from the user SHALL be `{"type": "message", "id", "text", "sent_at"}`. `al` SHALL keep no position: missed events arrive as ordinary events after it connects.
+`al wait` SHALL write each incoming event (the params of `event.deliver`) to standard output as one compact JSON line, in both JSON and `--human` modes, in the order received. Every event SHALL have a `type`; later kinds SHALL use new `type` values and existing kinds SHALL only gain optional fields. A message from the user SHALL be `{"type": "text_message", "id", "text", "sent_at"}`. `al` SHALL keep no position: missed events arrive as ordinary events after it connects.
 
 #### Scenario: Message arrives
 - **WHEN** `al wait` is running and the user sends "Hi"
-- **THEN** standard output gains the single line `{"type": "message", "id": "...", "text": "Hi", "sent_at": "..."}`
+- **THEN** standard output gains the single line `{"type": "text_message", "id": "...", "text": "Hi", "sent_at": "..."}`
 - **AND** the user's message becomes "Delivered" only after that line was written
 
 #### Scenario: Messages sent while not running
@@ -120,8 +120,8 @@
 - **THEN** `al` prints an error naming `AL_LINK_KEY` and `--key-file` and exits with the "no key" exit code (3)
 
 ### Requirement: Send makes one attempt
-`al send` SHALL make one attempt, send no `client_id`, and not retry.
+`al send` SHALL make one attempt, send no `idempotency_key`, and not retry.
 
 #### Scenario: Retry after unreachable
 - **WHEN** `al send` exits with the "service unreachable" exit code after the service stored the message, and the agent runs it again
-- **THEN** the message is stored twice, unless the agent calls the API directly with a `client_id`
+- **THEN** the message is stored twice, unless the agent calls the API directly with an `idempotency_key`
