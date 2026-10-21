@@ -96,7 +96,7 @@ The service SHALL order events by a per-Assistant sequence assigned when they ar
 - **THEN** its cursor stays at "b" and it does not receive "b" again
 
 ### Requirement: Message states
-The app SHALL show each of the user's messages as "Sending…" while it waits for the service, "Sent" once the service stored it, and "Delivered" once at least one Assistant Link acknowledged it. Only the latest of the user's messages SHALL show "Sent" or "Delivered". The Assistant's messages SHALL show no state. The app SHALL learn that a message was delivered through the notification `message.updated` on its live connection.
+The app SHALL show each of the user's messages as "Sending…" while it waits for the service, "Sent" once the service stored it, and "Delivered" once at least one Assistant Link acknowledged it. Only the latest of the user's messages SHALL show "Sent" or "Delivered". The Assistant's messages SHALL show no state. The app SHALL learn that a message was delivered through the notification `event.updated` on its live connection.
 
 #### Scenario: Sent
 - **WHEN** the service responds that it stored the message
@@ -144,7 +144,7 @@ The service SHALL record when the first Assistant Link acknowledged a message (`
 
 #### Scenario: Acknowledgement after the retention
 - **WHEN** a message is older than the delivery retention and an Assistant Link's acknowledgement of it, already in flight, arrives
-- **THEN** `delivered_at` is set, the message is Delivered, and the service sends `message.updated`
+- **THEN** `delivered_at` is set, the message is Delivered, and the service sends `event.updated`
 
 #### Scenario: First acknowledgement wins
 - **WHEN** "Link 1" and then "Link 2" acknowledge the same message
@@ -170,7 +170,7 @@ Each message the app sends SHALL carry an `idempotency_key`, which the service r
 - **THEN** the service rejects it with `409` `idempotency_key_conflict` and stores nothing
 
 ### Requirement: Messages from the Assistant
-An agent SHALL be able to send a text message to the user as its Assistant with `POST /alp/v1/messages`, whether or not its Assistant Link is online. The service SHALL store it, attribute it to the Assistant of that Link, and send the notification `message.created` to the account's open app connections. The app SHALL show it at the bottom of the open conversation within 2 seconds. The service SHALL NOT deliver it to the Assistant's Assistant Links.
+An agent SHALL be able to send a text message to the user as its Assistant with `POST /alp/v1/messages`, whether or not its Assistant Link is online. The service SHALL store it, attribute it to the Assistant of that Link, and send the notification `event.created` to the account's open app connections. The app SHALL show it at the bottom of the open conversation within 2 seconds. The service SHALL NOT deliver it to the Assistant's Assistant Links.
 
 #### Scenario: Message while the conversation is open
 - **WHEN** the app shows the conversation with "Hermes" and the agent sends "Done."
@@ -182,7 +182,7 @@ An agent SHALL be able to send a text message to the user as its Assistant with 
 
 #### Scenario: Message while another conversation is open
 - **WHEN** the app shows the conversation with "Muse" and the agent of "Hermes" sends a message
-- **THEN** the "Hermes" row in the Assistant list shows it as the latest message
+- **THEN** the "Hermes" row in the Assistant list shows it as the latest event
 
 #### Scenario: Other Assistant Links
 - **WHEN** the agent on "Link 1" sends a message

@@ -92,11 +92,11 @@ Only one timestamp is stored: `assistant_events.delivered_at`, set by the first 
 
 The app adds two states of its own that are never stored: "Sending…" (the request to the service is in flight) and "Not Delivered" when the service rejected the message or could not be reached ("Try Again").
 
-- **`delivered_at` is first-write-wins.** The acknowledgement runs `UPDATE … SET delivered_at = now() WHERE delivered_at IS NULL`, so the first Link's acknowledgement counts and later ones change nothing. An acknowledgement that arrives after the retention still sets it: Delivered wins over the derived Not Delivered. When the update changes a row, the service sends the app `message.updated`.
+- **`delivered_at` is first-write-wins.** The acknowledgement runs `UPDATE … SET delivered_at = now() WHERE delivered_at IS NULL`, so the first Link's acknowledgement counts and later ones change nothing. An acknowledgement that arrives after the retention still sets it: Delivered wins over the derived Not Delivered. When the update changes a row, the service sends the app `event.updated`.
 - "Not Delivered" after the retention is computed when the event is read; nothing is written or pushed when the retention passes, and the app shows it the next time it loads the event.
 - Only the latest of the user's messages shows "Sent" or "Delivered", as Apple Messages does. "Sending…" and "Not Delivered" show on every message they apply to, because they need attention.
 - A message that is Not Delivered because the retention passed is final: no "Try Again" (open question 3). A message the app could not send is retried by posting it again with the same `idempotency_key` (see "Client API").
-- The API carries the derived value as a read-only `status` on the user's `text_message` events (`sent`, `delivered`, `not_delivered`; never stored), because the app does not know the retention setting.
+- The API carries the derived value as a read-only `delivery_status` on the user's `text_message` events (`sent`, `delivered`, `not_delivered`; never stored), because the app does not know the retention setting.
 
 ### The agent sends over HTTP: `POST /alp/v1/messages`
 ```
@@ -126,7 +126,7 @@ One table holds everything in an Assistant's Timeline; the text of a message liv
 - `delivered_at`: the first Link acknowledgement; set only on the user's events.
 - `(account_id, assistant_id)` references `assistants` with `ON DELETE CASCADE`, like every tenant-owned table, so purging the account deletes its events.
 
-`text_messages(event_id primary key references assistant_events, text)` is the payload of a `text_message`, 1:1 with its event and deleted with it (`ON DELETE CASCADE`), so the purge removes it too. `text` is stored as given (not trimmed, line breaks kept), 1–4,000 Unicode code points (scalar values), not only Unicode White_Space characters. The payload can be deleted on its own while the event stays as a marker: history and `latest_message` LEFT JOIN the payload, a `text_message` event without a payload row has `text` null, the app shows it as a neutral placeholder bubble ("Message unavailable"), and delivery skips it. This slice has no way to do it; the split keeps it possible.
+`text_messages(event_id primary key references assistant_events, text)` is the payload of a `text_message`, 1:1 with its event and deleted with it (`ON DELETE CASCADE`), so the purge removes it too. `text` is stored as given (not trimmed, line breaks kept), 1–4,000 Unicode code points (scalar values), not only Unicode White_Space characters. The payload can be deleted on its own while the event stays as a marker: history and `latest_event` LEFT JOIN the payload, a `text_message` event without a payload row has `text` null, the app shows it as a neutral placeholder bubble ("Message unavailable"), and delivery skips it. This slice has no way to do it; the split keeps it possible.
 
 The cursor is one new column on `assistant_links`: `last_read_seq` (bigint, an event `seq`), null until pairing. `assistants` gains `last_event_seq` (bigint, default 0).
 
@@ -138,29 +138,29 @@ The cursor is one new column on `assistant_links`: `last_read_seq` (bigint, an e
 All under `/api/v1`, with the account credential:
 
 - `POST /assistants/:id/messages` with `{"idempotency_key": "<uuid>", "text"}` → `201 {"message": event}` as soon as the event is stored; delivery happens afterwards. Repeating an `idempotency_key` already used returns `200` with the stored event in its current state and stores nothing; this is "Try Again", with no separate retry endpoint. The same key with a different text or Assistant is `409 idempotency_key_conflict`. Text errors are `422` as above; an unknown Assistant is `404`. While an Assistant has no Links the app shows the setup guide and no composer, but the service still accepts and stores a post to an Assistant with no Links or only unpaired ones (no new error code): it is never delivered (a Link pairing later starts after it) and becomes "Not Delivered" after the retention.
-- `GET /assistants/:id/messages?limit=50&before=<event id>` → `{"messages": [event], "has_more": bool}`, the newest `limit` events of any type (`link_created` included) older than `before` (or the newest of all; the service resolves `before` to that event's `seq` by lookup, and an unknown id or one of another Assistant is `422 invalid_params`), returned oldest first by `seq`. `limit` defaults to 50 and is at most 100. The path and the `messages` key are kept from the previous revision.
-- The Assistants list adds `"latest_message": event | null` to each Assistant: its latest event of any type, so the home screen needs no history. It is null when the Assistant has no Links.
+- `GET /assistants/:id/events?limit=50&before=<event id>` → `{"events": [event], "has_more": bool}`, the newest `limit` events of any type (`link_created` included) older than `before` (or the newest of all; the service resolves `before` to that event's `seq` by lookup, and an unknown id or one of another Assistant is `422 invalid_params`), returned oldest first by `seq`. `limit` defaults to 50 and is at most 100. The history is read at `/events` and a text message is posted at `/messages`: the two paths differ because one returns events of every type and the other creates a text message.
+- The Assistants list adds `"latest_event": event | null` to each Assistant: its latest event of any type, so the home screen needs no history. It is null when the Assistant has no Links.
 
-An event is `{"id", "assistant_id", "type", "sender", "link_id", "text", "sent_at", "status", "idempotency_key"}`. `text` is null for a `link_created` event and for a `text_message` whose payload was deleted. `status` (derived, see "Message states") is null except for the user's `text_message` events, and `idempotency_key` is null except for the user's. The app matches its local "Sending…" or "Not Delivered" bubble to the stored event by `idempotency_key`.
+An event is `{"id", "assistant_id", "type", "sender", "link_id", "text", "sent_at", "delivery_status", "idempotency_key"}`. `text` is null for a `link_created` event and for a `text_message` whose payload was deleted. `delivery_status` (derived, see "Message states") is null except for the user's `text_message` events, and `idempotency_key` is null except for the user's. The app matches its local "Sending…" or "Not Delivered" bubble to the stored event by `idempotency_key`.
 
 The app's live connection sends, to every app connection of the account:
 
-- `message.created` with `{"message": event}` for each `text_message` from the Assistant.
-- `message.updated` with `{"message": event}` when a message of the user gets its `delivered_at`. The app ignores one for an event it has not loaded.
+- `event.created` with `{"event": event}` for each `text_message` from the Assistant.
+- `event.updated` with `{"event": event}` when a message of the user gets its `delivered_at`. The app ignores one for an event it has not loaded.
 
-The user's own new messages need no notification: the app that sends one gets it in the response. After the app creates a Link it loads the latest events again to show the new `link_created` event.
+These are the only two in this slice; no other event sends one. They are app notifications on `/api/v1/connect`, separate from ALP's `event.deliver` on the agent connection. The user's own new messages need no notification: the app that sends one gets it in the response. After the app creates a Link it loads the latest events again to show the new `link_created` event.
 
 ### App: Timeline
 The conversation screen shows the loaded events, oldest first; the newest is at the bottom, where the screen scrolls on open and on every new message, as it does today. It no longer derives "Assistant Link created" events from the Assistants list: they are `link_created` events in the history.
 
 - History: the app asks for the latest 50 events. When `has_more` is true, a "Load Earlier Messages" button heads the Timeline and loads the 50 before the oldest one, keeping the scroll position. *Alternative:* load everything. Simplest, but unbounded.
 - A `link_created` event is shown as the centered caption "Assistant Link created" with the Link's name, as today.
-- While open, `message.created` for this Assistant appends an event and `message.updated` replaces the event with the same id. For another Assistant they update that row's latest-message preview only. Returning to the foreground refetches the latest 50 and merges by id, the stored event winning, so a state change missed while the app was away appears.
+- While open, `event.created` for this Assistant appends an event and `event.updated` replaces the event with the same id. For another Assistant they update that row's latest event only. Returning to the foreground refetches the latest 50 and merges by id, the stored event winning, so a state change missed while the app was away appears.
 - A message sent by the user is added immediately as "Sending…" with its `idempotency_key`, and replaced by the service's event when the response arrives. If the service rejects it, cannot be reached, or gives no response after 15 seconds, the app marks it "Not Delivered" locally, and "Try Again" posts it again with the same `idempotency_key`. A message not stored before is stored now, so it moves to the bottom of the Timeline.
 - The offline notice follows the live status; the composer stays enabled.
 
 ### Assistant list preview
-The row shows the Assistant's `latest_message` event: for a `text_message`, its text on one line with "You: " in front for the user's messages; for `link_created`, "Assistant Link created". The time stays on the right. A latest message that is Not Delivered (derived after the retention, or failed in the app) shows a small red exclamation mark before the text.
+The row shows the Assistant's `latest_event`: for a `text_message`, its text on one line with "You: " in front for the user's messages; for `link_created`, "Assistant Link created". The time stays on the right. A latest event that is the user's message and Not Delivered (derived after the retention, or failed in the app) shows a small red exclamation mark before the text.
 
 ### `al send`
 ```
