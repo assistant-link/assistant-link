@@ -27,7 +27,7 @@ The text of a message SHALL have 1 to 4,000 Unicode code points (scalar values) 
 - **THEN** it is valid, and one more makes it too long
 
 ### Requirement: Delivery retention
-The service SHALL keep each message of the user available for delivery to Assistant Links for 7 days after it was sent (the delivery retention), a single service setting. An Assistant Link SHALL NOT receive a message older than the delivery retention. The Timeline SHALL keep every message until the account is deleted, regardless of the delivery retention.
+The service SHALL keep each message of the user available for delivery to Assistant Links for 7 days after it was sent (the delivery retention), a single service setting. An Assistant Link SHALL NOT receive a message older than the delivery retention. The Timeline SHALL keep every message until the account is purged, regardless of the delivery retention.
 
 #### Scenario: Within the retention
 - **WHEN** a message was sent 6 days ago and an Assistant Link of the Assistant connects now for the first time since
@@ -189,7 +189,7 @@ An agent SHALL be able to send a text message to the user as its Assistant with 
 - **THEN** the agent on "Link 2" receives no event for it
 
 ### Requirement: Message history
-The service SHALL store every item of an Assistant's Timeline as an event until the account is deleted and return them oldest first, the latest 50 by default and earlier ones on request.
+The service SHALL store every item of an Assistant's Timeline as an event until the account is purged and return them oldest first, the latest 50 by default and earlier ones on request.
 
 #### Scenario: Link created event in the history
 - **WHEN** an Assistant Link is created for "Hermes"
