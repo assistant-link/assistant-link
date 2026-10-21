@@ -33,7 +33,7 @@ Log out no longer deletes rows. It sets `accounts.deleted_at` (`timestamptz`, nu
 
 A crash or a second run is harmless: an account is either purged in its transaction or untouched. **The deletion grace period** is a single service setting (config key `:deletion_grace_period`), default 60 days, settable in seconds in tests.
 
-The app keeps its two confirmations and the "Delete Everything" button. Its second alert, which today says "Logging out permanently deletes all your Assistants, Assistant Links, and history. This can't be undone.", becomes "Logging out deletes all your Assistants, Assistant Links, and history. This can't be undone. Assistant Link permanently erases the data after 60 days." The "60 days" is the default and is written into the copy; changing the setting means changing the copy.
+The app keeps its two confirmations and the "Delete Everything" button. Its second alert stays as it is ("Logging out permanently deletes all your Assistants, Assistant Links, and history. This can't be undone."), by the product owner's choice: for the user the data is gone at once and can't be recovered. The service-side purge after the deletion grace period is unaffected.
 
 There is no undelete (see non-goals).
 
@@ -41,7 +41,7 @@ There is no undelete (see non-goals).
 
 *Alternative:* run the purge from Oban cron. It would add a dependency and a table for one hourly DELETE; a supervised process is enough. Revisit when other scheduled jobs exist.
 
-**Names to review** (invented here; rename before implementation if the product owner prefers others): `accounts.deleted_at`; the deletion grace period and its config key `:deletion_grace_period`; `Accounts.purge_deleted_accounts/0`; the process `AssistantLink.Accounts.Purger`; the partial index on `accounts (deleted_at)`; the copy "Assistant Link permanently erases the data after 60 days" (app-account spec). The reason `account_deleted` and `401 unauthorized` are unchanged.
+**Names to review** (invented here; rename before implementation if the product owner prefers others): `accounts.deleted_at`; the deletion grace period and its config key `:deletion_grace_period`; `Accounts.purge_deleted_accounts/0`; the process `AssistantLink.Accounts.Purger`; the partial index on `accounts (deleted_at)`. The reason `account_deleted` and `401 unauthorized` are unchanged.
 
 ### Events and the per-Link stream
 An **event** is one item of an Assistant's Timeline, stored as one row of `assistant_events`. The service delivers some of them to Assistant Links as `{"id", "type", …fields}`. Only `id` and `type` are required on every event; the other fields are defined per type. This slice has two types: `link_created` (a Link was created; sender `system`; never delivered) and `text_message` (fields `text` and `sent_at`). Only the user's `text_message` events are delivered. The ALP `type` value is the stored type, `text_message`, not `message`: one name in the database, the protocol, and `al wait` lines, so later types need no mapping. The event `id` is the row's UUIDv7; order is its `seq` (see "The cursor").

@@ -51,7 +51,7 @@ Serves V1 job **1. Reach my assistant from anywhere**, and the first step of job
 - `alp`: adds the `event.deliver` request, its acknowledgement and error rules, and the `POST /alp/v1/messages` endpoint, and notes that a service-to-agent event that needs an acknowledgement is a request.
 - `agent-cli`: adds `al send` and the incoming-event format of `al wait`, and extends the output, key input, and exit-code requirements to `al send`.
 - `assistants`: the Assistant list's most recent event and the conversation screen include messages.
-- `app-account`: log out soft deletes the account (`deleted_at`), its data, including messages, is unreachable at once and permanently erased after the deletion grace period (default 60 days); the confirmation copy says so.
+- `app-account`: log out soft deletes the account (`deleted_at`), its data, including messages, is unreachable at once and permanently erased after the deletion grace period (default 60 days); the log-out confirmation copy is unchanged.
 
 ## Open questions
 
