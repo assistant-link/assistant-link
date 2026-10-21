@@ -52,12 +52,20 @@
 ## ADDED Requirements
 
 ### Requirement: Incoming events
-`al wait` SHALL write each incoming event to standard output as one compact JSON line, in both JSON and `--human` modes. Every event SHALL have a `type` naming its kind; later kinds SHALL use new `type` values and existing kinds SHALL only gain optional fields. A message from the user SHALL be the event `{"type": "message", "id", "text", "sent_at"}`.
+`al wait` SHALL write each incoming event (the params of `event.deliver`) to standard output as one compact JSON line, in both JSON and `--human` modes, in the order received. Every event SHALL have a `type`; later kinds SHALL use new `type` values and existing kinds SHALL only gain optional fields. A message from the user SHALL be `{"type": "message", "id", "text", "sent_at"}`. `al` SHALL keep no position: missed events arrive as ordinary events after it connects.
 
 #### Scenario: Message arrives
 - **WHEN** `al wait` is running and the user sends "Hi"
 - **THEN** standard output gains the single line `{"type": "message", "id": "...", "text": "Hi", "sent_at": "..."}`
-- **AND** the user's message becomes "Sent" only after that line was written
+- **AND** the user's message becomes "Delivered" only after that line was written
+
+#### Scenario: Messages sent while not running
+- **WHEN** the user sent "a" and "b" while `al wait` was not running, and it then starts
+- **THEN** standard output gains the line for "a" and then the line for "b"
+
+#### Scenario: Duplicate after a lost acknowledgement
+- **WHEN** `al wait` wrote the line for a message, its connection dropped before the acknowledgement, and it reconnects
+- **THEN** the same line, with the same `id`, may appear again
 
 #### Scenario: Multi-line text
 - **WHEN** the user sends a message with a line break
@@ -68,12 +76,16 @@
 - **THEN** standard output gets the same JSON line and only status messages on standard error are text
 
 ### Requirement: Acknowledge an event after writing it
-`al wait` SHALL answer the service's `message.deliver` request with an empty result only after the event line has been written and flushed. The write SHALL run off the connection loop with a 5 second timeout. If it fails or times out, `al wait` SHALL answer with error `-32001` (`data.reason` `not_received`), report it on standard error, and keep running.
+`al wait` SHALL answer the service's `event.deliver` request with an empty result only after the event line has been written and flushed: write, flush, then acknowledge. The write SHALL run off the connection loop with a 5 second timeout. If it fails or times out, `al wait` SHALL answer with error `-32001` (`data.reason` `not_received`), report it on standard error, and keep running.
 
 #### Scenario: Nothing reads standard output
 - **WHEN** the process reading `al wait`'s standard output has closed it or stopped reading, and a message arrives
-- **THEN** `al wait` answers `message.deliver` with error `-32001` `not_received` within about 5 seconds, so the message is not "Sent"
+- **THEN** `al wait` answers `event.deliver` with error `-32001` `not_received` within about 5 seconds, so the message is not "Delivered" by this Assistant Link
 - **AND** it reports the failure on standard error, keeps running, and the Assistant Link stays online
+
+#### Scenario: Redelivered once the reader is back
+- **WHEN** a message was answered with `not_received` and the reader later resumes reading
+- **THEN** the service sends the message again, `al wait` writes its line, and acknowledges it
 
 ### Requirement: Send a message
 `al send <text>` SHALL send a text message to the user as the Assistant of the Assistant Link with `POST /alp/v1/messages`, without opening an agent connection or changing the Assistant Link's presence. With `-` as the text it SHALL read standard input as UTF-8, dropping one trailing line feed. It SHALL print `{"message_id", "sent_at"}` and exit 0, or `{"error": {"code", "message"}}` and the matching exit code on failure. Without a text it SHALL report a usage error.
@@ -106,3 +118,10 @@
 #### Scenario: No key
 - **WHEN** the agent runs `al send "Hi"` with neither `--key-file` nor `AL_LINK_KEY`
 - **THEN** `al` prints an error naming `AL_LINK_KEY` and `--key-file` and exits with the "no key" exit code (3)
+
+### Requirement: Send makes one attempt
+`al send` SHALL make one attempt, send no `client_id`, and not retry.
+
+#### Scenario: Retry after unreachable
+- **WHEN** `al send` exits with the "service unreachable" exit code after the service stored the message, and the agent runs it again
+- **THEN** the message is stored twice, unless the agent calls the API directly with a `client_id`

@@ -10,28 +10,68 @@ The service SHALL accept a WebSocket connection at `GET /alp/v1/connect` authent
 
 ## ADDED Requirements
 
-### Requirement: Message delivery request
-When the user sends a message, the service SHALL send the agent the request `message.deliver` with params `message_id` (string), `text` (string), and `sent_at` (RFC 3339 UTC timestamp). The agent SHALL confirm that it has taken the message by responding with a result object, which MAY be empty; any error response SHALL mean it did not. An agent that does not implement the method SHALL respond with `-32601`.
+### Requirement: Event delivery request
+The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: an object with a stable `id` and a `type`, the only fields required on every event, plus the fields of its type. The type `message` has `text` and `sent_at` (RFC 3339 UTC). The JSON-RPC request `id` SHALL be the event's `id`. A result object, which MAY be empty, SHALL acknowledge the event; an error response SHALL mean the agent did not take it.
 
 #### Scenario: Message delivered
-- **WHEN** the user sends "Hi" to an Assistant whose Assistant Link is online
-- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "message.deliver", "params": {"message_id": ..., "text": "Hi", "sent_at": ...}}`
-- **AND** the message is marked `sent` when the agent responds with `{"jsonrpc": "2.0", "id": ..., "result": {}}`
+- **WHEN** the user sends "Hi" to an Assistant that has an online Assistant Link
+- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "event.deliver", "params": {"id": ..., "type": "message", "text": "Hi", "sent_at": ...}}`
+- **AND** the Assistant Link's cursor advances when the agent responds with `{"jsonrpc": "2.0", "id": ..., "result": {}}`
 
-#### Scenario: Agent without message support
-- **WHEN** an agent that does not implement `message.deliver` responds with `-32601`
-- **THEN** the connection stays open and the message is not marked `sent`
+### Requirement: Late acknowledgement
+The service SHALL accept a response for the event currently in flight as its acknowledgement even if it arrives after the 30 seconds, and SHALL ignore a response for any other id.
+
+#### Scenario: Late response
+- **WHEN** the agent responds to the event in flight after 30 seconds, before the service sent it again
+- **THEN** the cursor advances and the retry is cancelled
+
+#### Scenario: Response for another id
+- **WHEN** the agent responds with an id that is not the event in flight
+- **THEN** the service ignores it and the connection stays open
+
+### Requirement: Event order, cursor, and catch-up
+For each Assistant Link the service SHALL send one `event.deliver` request at a time, in event order, and SHALL send the next only after the agent acknowledged the previous one. Acknowledgement SHALL advance the cursor the service keeps for that Assistant Link; the agent SHALL NOT send or keep a position. After `connection.ready`, the service SHALL send the events after the cursor that are within the delivery retention.
+
+#### Scenario: One at a time
+- **WHEN** three events are waiting for an Assistant Link
+- **THEN** the second request is sent only after the agent acknowledged the first
+
+#### Scenario: Catch-up on connect
+- **WHEN** an agent connects after missing two events
+- **THEN** after `connection.ready` it receives them as two `event.deliver` requests, oldest first
+
+### Requirement: Event types
+Later event types SHALL be added with new `type` values and SHALL use the `event.deliver` request. An agent SHALL ignore the fields and types it does not know.
+
+#### Scenario: Unknown event type
+- **WHEN** a v1 agent receives `event.deliver` with a `type` added in a later v1 revision
+- **THEN** it ignores the event's unknown parts and keeps the connection, and it acknowledges the event if it took it
 
 ### Requirement: Delivery errors and duplicates
-An agent that cannot take a message SHALL respond to `message.deliver` with error `-32001` and `data.reason` `not_received`. A retried message SHALL carry the same `message_id`; delivery is at least once, so a reader SHALL dedupe by `message_id`.
+An agent that does not implement `event.deliver` SHALL respond with `-32601`. An agent that cannot take an event SHALL respond to `event.deliver` with error `-32001` and `data.reason` `not_received`. An event whose request got an error, a closed connection, or no response within 30 seconds stays unacknowledged, and the service SHALL send it again with the same `id`. Delivery is at least once, so a reader SHALL dedupe by `id`.
 
-#### Scenario: Agent cannot take the message
-- **WHEN** an agent responds to `message.deliver` with error `-32001` and `data.reason` `not_received`
-- **THEN** the message is not marked `sent` and the connection stays open
+#### Scenario: Agent cannot take the event
+- **WHEN** an agent responds to `event.deliver` with error `-32001` and `data.reason` `not_received`
+- **THEN** the cursor does not advance, the connection stays open, and the service sends the event again later
 
-#### Scenario: Unknown response id
-- **WHEN** the agent sends a response whose `id` matches no waiting request
-- **THEN** the service ignores it and the connection stays open
+#### Scenario: Lost acknowledgement
+- **WHEN** an agent wrote an event but its connection dropped before it responded, and it reconnects
+- **THEN** the service sends the same event again with the same `id`
+
+#### Scenario: Agent without event support
+- **WHEN** an agent that does not implement `event.deliver` responds with `-32601`
+- **THEN** the connection stays open and the cursor does not advance, and the Assistant Link receives the events once it runs a version that supports them, if they are within the delivery retention
+
+### Requirement: Retry target
+The service SHALL send an unacknowledged event to the Assistant Link's next-newest connection that has not failed it; when every open connection failed it, again after 30 seconds, doubling after each failed round up to 5 minutes, and at once, resetting the wait, when a new connection opens.
+
+#### Scenario: Newest connection fails
+- **WHEN** an Assistant Link has two open connections and the newest answers `event.deliver` with an error
+- **THEN** the service sends the event to the other one
+
+#### Scenario: Backoff
+- **WHEN** every open connection of an Assistant Link failed the event twice in a row
+- **THEN** the service waits 60 seconds before the next round
 
 ### Requirement: Send a message to the user
 The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token, accepting `{"text": "<message>"}` and responding `201` with `{"message_id", "sent_at"}`. It SHALL accept the request whether or not the Assistant Link is online, and SHALL NOT change its presence or last active time. The text SHALL have 1 to 4,000 Unicode code points (scalar values) and SHALL NOT consist only of Unicode White_Space characters; otherwise the response SHALL be `422` and nothing stored.
@@ -53,9 +93,13 @@ The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token,
 - **WHEN** an agent posts a message without an `Authorization` header
 - **THEN** the service responds `401` with `unauthorized`
 
-### Requirement: Idempotent message from the agent
-`POST /alp/v1/messages` SHALL accept an optional string `client_id`, unique per Assistant Link. Repeating it SHALL respond `200` with the stored message's `{"message_id", "sent_at"}` and store no duplicate.
+### Requirement: Idempotent send
+`POST /alp/v1/messages` SHALL accept an optional `client_id` (string, unique per Assistant Link). A request repeating a `client_id` SHALL respond `200` with the stored message's `{"message_id", "sent_at"}` and store nothing, unless its text differs, which SHALL be `409` `client_id_conflict`.
 
 #### Scenario: Repeated client_id
-- **WHEN** an agent posts a message with a `client_id` it already used
-- **THEN** the response is `200` with the stored message and no second message is stored
+- **WHEN** an agent posts the same `client_id` and text twice
+- **THEN** the second response is `200` with the same `message_id` and the Timeline holds one message
+
+#### Scenario: Reused client_id with other text
+- **WHEN** an agent posts a `client_id` it already used with a different text
+- **THEN** the response is `409` with `client_id_conflict` and nothing is stored

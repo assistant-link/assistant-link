@@ -22,5 +22,5 @@ The user SHALL be able to log out from the app. Because logging out cannot be un
 - **THEN** the service rejects it as unauthorized
 
 #### Scenario: Messages are deleted
-- **WHEN** the account is deleted after the user and the Assistant exchanged messages
-- **THEN** none of those messages remain in the service
+- **WHEN** the account is deleted after the user and the Assistant exchanged messages, some of them not yet delivered to an Assistant Link
+- **THEN** none of those messages remain in the service, and no Assistant Link receives them

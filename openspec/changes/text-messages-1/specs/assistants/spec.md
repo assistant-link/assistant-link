@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Assistant list is the home screen
-The app SHALL open to a list of the user's Assistants, laid out like a messaging app's conversation list. Each entry SHALL show the Assistant's avatar, name, whether it is online, and its most recent event with that event's time. The most recent event is the latest of the Assistant's messages and its "Assistant Link created" events. A message SHALL be shown as its text on one line, truncated, with the prefix "You: " when the user sent it; a failed message of the user SHALL also show a red exclamation mark before the text.
+The app SHALL open to a list of the user's Assistants, laid out like a messaging app's conversation list. Each entry SHALL show the Assistant's avatar, name, whether it is online, and its most recent event with that event's time. The most recent event is the latest of the Assistant's messages and its "Assistant Link created" events. A message SHALL be shown as its text on one line, truncated, with the prefix "You: " when the user sent it; a message of the user that is Not Delivered SHALL also show a red exclamation mark before the text.
 
 #### Scenario: Home screen shows Assistants
 - **WHEN** the user opens the app and has Assistants "Hermes", "Grok Bot", and "Muse"
@@ -23,8 +23,8 @@ The app SHALL open to a list of the user's Assistants, laid out like a messaging
 - **WHEN** the latest event of "Grok Bot" is the user's message "Summarize today's news"
 - **THEN** the "Grok Bot" entry shows "You: Summarize today's news"
 
-#### Scenario: Failed message
-- **WHEN** the latest event of "Muse" is the user's message "Are you there?" that failed
+#### Scenario: Not Delivered message
+- **WHEN** the latest event of "Muse" is the user's message "Are you there?" that no Assistant Link took within the delivery retention
 - **THEN** the "Muse" entry shows a red exclamation mark before "You: Are you there?"
 
 #### Scenario: Assistant Link event newer than any message
