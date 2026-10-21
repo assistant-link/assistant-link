@@ -41,7 +41,7 @@ There is no undelete (see non-goals).
 
 *Alternative:* run the purge from Oban cron. It would add a dependency and a table for one hourly DELETE; a supervised process is enough. Revisit when other scheduled jobs exist.
 
-**Names to review** (invented here; rename before implementation if the product owner prefers others): `accounts.deleted_at`; the deletion grace period and its config key `:deletion_grace_period`; `Accounts.purge_deleted_accounts/0`; the process `AssistantLink.Accounts.Purger`; the partial index on `accounts (deleted_at)`. The reason `account_deleted` and `401 unauthorized` are unchanged.
+**Names** (reviewed and decided): `accounts.deleted_at`; the deletion grace period and its config key `:deletion_grace_period`; `Accounts.purge_deleted_accounts/0`; the process `AssistantLink.Accounts.Purger`; the partial index on `accounts (deleted_at)`. The reason `account_deleted` and `401 unauthorized` are unchanged.
 
 ### Events and the per-Link stream
 An **event** is one item of an Assistant's Timeline, stored as one row of `assistant_events`. The service delivers some of them to Assistant Links as `{"id", "type", …fields}`. Only `id` and `type` are required on every event; the other fields are defined per type. This slice has two types: `link_created` (a Link was created; sender `system`; never delivered) and `text_message` (fields `text` and `sent_at`). Only the user's `text_message` events are delivered. The ALP `type` value is the stored type, `text_message`, not `message`: one name in the database, the protocol, and `al wait` lines, so later types need no mapping. The event `id` is the row's UUIDv7; order is its `seq` (see "The cursor").
