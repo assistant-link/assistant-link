@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Log out deletes the account
-The user SHALL be able to log out from the app. Because logging out cannot be undone, the app SHALL require two separate confirmations; the second SHALL state that all Assistants, Assistant Links, and history will be permanently deleted. Logging out SHALL soft delete the account: the service SHALL record when it was deleted (`deleted_at`) and keep its data, and from then on the account SHALL behave as deleted. Its device credentials and Link tokens SHALL be rejected as unauthorized, its pairing codes SHALL be rejected like an unknown code, web sessions and magic-link tokens of users whose only account it is SHALL stop working at once, its data (Assistants, Timeline events with their message texts, and the rest of the history) SHALL NOT be readable, postable, or deliverable to any Assistant Link, and the service SHALL disconnect the agents and app connections of the account. Once `deleted_at` is older than the deletion grace period, a single service setting that defaults to 60 days, the service SHALL permanently delete the account, everything it owns, and every user whose only account it was; it SHALL NOT purge an account within the grace period, and the user SHALL NOT be able to undo the deletion. Afterwards the app SHALL return to its first-launch state. The ALP contract is unchanged: connections close with the reason `account_deleted` and rejected tokens get `401 unauthorized`.
+The user SHALL be able to log out from the app. Because logging out cannot be undone, the app SHALL require two separate confirmations; the second SHALL state that all Assistants, Assistant Links, and history will be permanently deleted. Logging out SHALL soft delete the account: the service SHALL record when it was deleted (`deleted_at`) and keep its data, and from then on the account SHALL behave as deleted. Its device credentials and Link tokens SHALL be rejected as unauthorized, its pairing codes SHALL be rejected like an unknown code, web sessions and magic-link tokens of users whose only account it is SHALL stop working at once, its data (Assistants, Timeline events with their message texts, and the rest of the history) SHALL NOT be readable, postable, or deliverable to any Assistant Link, and the service SHALL disconnect the agents and app connections of the account. Once `deleted_at` is older than the deletion grace period, a single service setting that defaults to 60 days, the service SHALL permanently delete the account, everything it owns, and every user of it who then has no membership left in any account, and no other account; it SHALL NOT purge an account within the grace period, and the user SHALL NOT be able to undo the deletion. Afterwards the app SHALL return to its first-launch state. The ALP contract is unchanged: connections close with the reason `account_deleted` and rejected tokens get `401 unauthorized`.
 
 #### Scenario: Log out after two confirmations
 - **WHEN** the user taps log out, confirms, and then confirms again on the "permanently deleted" prompt
@@ -35,7 +35,21 @@ The user SHALL be able to log out from the app. Because logging out cannot be un
 
 #### Scenario: Purge after the grace period
 - **WHEN** an account was deleted for longer than the deletion grace period
-- **THEN** the service permanently deletes the account, everything it owns (Assistants, Assistant Links, pairing codes, Timeline events, message texts, cursors), and every user whose only account it was, with their devices
+- **THEN** the service permanently deletes that account, everything it owns (Assistants, Assistant Links, pairing codes, Timeline events, message texts, cursors), and every user of it who has no membership left in any account, with their devices
+- **AND** it deletes no other account
+
+#### Scenario: User with no account left, with an email
+- **WHEN** a purged account's only member has an email and belongs to no other account
+- **THEN** the user is deleted with their devices
+
+#### Scenario: User with no account left, without an email
+- **WHEN** a purged account's only member is an anonymous app user without an email and belongs to no other account
+- **THEN** the user is deleted with their devices
+
+#### Scenario: User still in another account
+- **WHEN** a user of a purged account is also a member of another account
+- **THEN** the user is kept
+- **AND** the other account and everything it owns are untouched
 
 #### Scenario: Still within the grace period
 - **WHEN** an account was deleted for less than the deletion grace period

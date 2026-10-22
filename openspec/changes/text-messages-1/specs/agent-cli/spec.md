@@ -49,23 +49,38 @@
 - **WHEN** the service cannot be reached during `al status`
 - **THEN** `al` reports `check` `unreachable` with a message naming the service URL and exits 5
 
+### Requirement: Agent install instructions
+The service SHALL serve agent-facing install instructions (`install.md`) at the URL included in the pairing text. They SHALL cover only installing `al` for the agent's platform, pairing with the code, keeping the Link key in the host's secret storage (such as the macOS Keychain, the Linux Secret Service, or a file readable only by the agent's user) and supplying it to `al` from a small wrapper, on all platforms, and verifying with `al status`, and SHALL end with "Run `al help` and follow it". Usage, such as staying online with `al wait` and replying with `al send`, SHALL NOT be in them: it lives in the `al` help. Every command in them SHALL work as written.
+
+#### Scenario: Agent follows install.md
+- **WHEN** an agent is given the pairing text and follows the linked `install.md` on a supported host
+- **THEN** `al status` exits 0 and the instructions end by telling the agent to run `al help`
+
+#### Scenario: Two assistants on one host
+- **WHEN** two agents running as the same host user each follow `install.md` with their own pairing text
+- **THEN** each stores its own Link key and wrapper, and `al status` exits 0 for both
+
 ## ADDED Requirements
 
 ### Requirement: Incoming events
-`al wait` SHALL write each incoming event (the params of `event.deliver`) to standard output as one compact JSON line, in both JSON and `--human` modes, in the order received. Every event SHALL have a `type`; later kinds SHALL use new `type` values and existing kinds SHALL only gain optional fields. A message from the user SHALL be `{"type": "text_message", "id", "text", "sent_at"}`. `al` SHALL keep no position: missed events arrive as ordinary events after it connects.
+`al wait` SHALL write each incoming event (the params of `event.deliver`) to standard output as one compact JSON line, in both JSON and `--human` modes, in the order received. Every event SHALL have `id`, `type`, `created_at`, and `deleted`, plus the content under a key named after the type. `al` SHALL keep no position: missed events arrive as ordinary events after it connects.
 
 #### Scenario: Message arrives
 - **WHEN** `al wait` is running and the user sends "Hi"
-- **THEN** standard output gains the single line `{"type": "text_message", "id": "...", "text": "Hi", "sent_at": "..."}`
+- **THEN** standard output gains the single line `{"id": "...", "type": "text_message", "created_at": "...", "deleted": false, "text_message": {"text": "Hi"}}`
 - **AND** the user's message becomes "Delivered" only after that line was written
+
+#### Scenario: Deleted message arrives
+- **WHEN** the content of a message was deleted and its event is delivered to `al wait`
+- **THEN** standard output gains a line with `"deleted": true` and no `text_message` key
+
+#### Scenario: Later kinds
+- **WHEN** a later kind of event arrives
+- **THEN** it has its own `type` and content key, and existing kinds only gain optional fields
 
 #### Scenario: Messages sent while not running
 - **WHEN** the user sent "a" and "b" while `al wait` was not running, and it then starts
 - **THEN** standard output gains the line for "a" and then the line for "b"
-
-#### Scenario: Duplicate after a lost acknowledgement
-- **WHEN** `al wait` wrote the line for a message, its connection dropped before the acknowledgement, and it reconnects
-- **THEN** the same line, with the same `id`, may appear again
 
 #### Scenario: Multi-line text
 - **WHEN** the user sends a message with a line break
@@ -76,23 +91,34 @@
 - **THEN** standard output gets the same JSON line and only status messages on standard error are text
 
 ### Requirement: Acknowledge an event after writing it
-`al wait` SHALL answer the service's `event.deliver` request with an empty result only after the event line has been written and flushed: write, flush, then acknowledge. The write SHALL run off the connection loop with a 5 second timeout. If it fails or times out, `al wait` SHALL answer with error `-32001` (`data.reason` `not_received`), report it on standard error, and keep running.
+`al wait` SHALL have a single writer for standard output that never abandons a write, so it never prints a broken or interleaved line. It SHALL answer `event.deliver` with an empty result only after the line has been written and flushed: write, flush, then acknowledge. While a write is pending, it SHALL answer any further `event.deliver` with error `-32001` (`data.reason` `not_received`) and report it on standard error.
 
 #### Scenario: Nothing reads standard output
 - **WHEN** the process reading `al wait`'s standard output has closed it or stopped reading, and a message arrives
-- **THEN** `al wait` answers `event.deliver` with error `-32001` `not_received` within about 5 seconds, so the message is not "Delivered" by this Assistant Link
-- **AND** it reports the failure on standard error, keeps running, and the Assistant Link stays online
+- **THEN** the write stays pending and the message is not "Delivered" by this Assistant Link
+- **AND** any further `event.deliver` is answered with error `-32001` `not_received`, nothing is interleaved on standard output, and the Assistant Link stays online
 
-#### Scenario: Redelivered once the reader is back
-- **WHEN** a message was answered with `not_received` and the reader later resumes reading
-- **THEN** the service sends the message again, `al wait` writes its line, and acknowledges it
+#### Scenario: Written once the reader is back
+- **WHEN** the reader resumes reading
+- **THEN** the pending line is written whole and acknowledged, and later events follow in order
+
+### Requirement: Drop a repeat of the last event
+`al wait` SHALL remember the id of the last line it wrote and, when an event with that id arrives again, acknowledge it without writing. Since the service keeps one event in flight per Assistant Link, a repeat can only be the last event written; only a restart of `al wait`, or two `al wait` processes on one Link, can show the last event once more.
+
+#### Scenario: Same id arrives again
+- **WHEN** `al wait` wrote the line for a message, its connection dropped before the acknowledgement, and it reconnects
+- **THEN** the service sends the same event again, and `al wait` acknowledges it without writing the line a second time
+
+#### Scenario: Restart repeats the last event
+- **WHEN** `al wait` wrote the last line, was restarted before the acknowledgement reached the service, and starts again
+- **THEN** the same line, with the same `id`, may appear once more
 
 ### Requirement: Send a message
-`al send <text>` SHALL send a text message to the user as the Assistant of the Assistant Link with `POST /alp/v1/messages`, without opening an agent connection or changing the Assistant Link's presence. With `-` as the text it SHALL read standard input as UTF-8, dropping one trailing line feed. It SHALL print `{"message_id", "sent_at"}` and exit 0, or `{"error": {"code", "message"}}` and the matching exit code on failure. Without a text it SHALL report a usage error.
+`al send <text>` SHALL send a text message to the user as the Assistant of the Assistant Link with `POST /alp/v1/messages`, without opening an agent connection or changing the Assistant Link's presence. With `-` as the text it SHALL read standard input as UTF-8, dropping one trailing line feed. It SHALL print `{"message_id", "created_at"}` and exit 0, or `{"error": {"code", "message"}}` and the matching exit code on failure. Without a text it SHALL report a usage error.
 
 #### Scenario: Send as an argument
 - **WHEN** the agent runs `al send "Your reminder is set."`
-- **THEN** `al` prints the new `message_id` and `sent_at` and exits 0
+- **THEN** `al` prints the new `message_id` and `created_at` and exits 0
 - **AND** the message appears in the Assistant's Timeline in the app
 
 #### Scenario: Send from standard input
@@ -120,8 +146,42 @@
 - **THEN** `al` prints an error naming `AL_LINK_KEY` and `--key-file` and exits with the "no key" exit code (3)
 
 ### Requirement: Send makes one attempt
-`al send` SHALL make one attempt, send no `idempotency_key`, and not retry.
+`al send` SHALL generate a fresh UUIDv7 `idempotency_key` per invocation and send it, make one attempt, and not retry.
+
+#### Scenario: Key per invocation
+- **WHEN** the agent runs `al send "Hi"` twice
+- **THEN** each request carries a different UUIDv7 `idempotency_key`
 
 #### Scenario: Retry after unreachable
 - **WHEN** `al send` exits with the "service unreachable" exit code after the service stored the message, and the agent runs it again
-- **THEN** the message is stored twice, unless the agent calls the API directly with an `idempotency_key`
+- **THEN** the message is stored twice, because the second invocation has a new `idempotency_key`, unless the agent calls the API directly and reuses one
+
+### Requirement: Usage help
+`al help` SHALL be short and general only: what `al` is, the list of commands one line each, the overall flow (stay online with `al wait`, reply with `al send`), a short Link key section, and "run `al <command> --help` for details". It SHALL NOT repeat subcommand help, so it can grow without becoming one giant text. Help ships in the binary, so it is bound to the installed version.
+
+#### Scenario: General only
+- **WHEN** the agent runs `al help`
+- **THEN** it lists each command in one line and points to `al <command> --help` for details, without the event format or the text rules
+
+### Requirement: Subcommand help
+`al wait --help` SHALL describe receiving: one JSON line per event, the nested format, the stable `id` and that the last event may repeat once after a restart, that missed events arrive first, and deleted events. `al send --help` SHALL describe replying: the text rules and the `idempotency_key`.
+
+#### Scenario: Receiving details
+- **WHEN** the agent runs `al wait --help`
+- **THEN** it describes the JSON line per event, the nested format, the stable `id`, that the last event may repeat once after a restart, that missed events arrive first, and deleted events
+
+#### Scenario: Replying details
+- **WHEN** the agent runs `al send --help`
+- **THEN** it describes the text rules and the `idempotency_key`
+
+### Requirement: Link key help
+The Link key section of `al help` SHALL show only the example for the current operating system (macOS: the Keychain only; Linux: the Secret Service plus a file readable only by the user as a fallback; other systems: the file) and SHALL always say "If your environment has a safer way to guard credentials, use it instead."
+
+#### Scenario: Help on macOS
+- **WHEN** the agent runs `al help` on macOS
+- **THEN** the Link key section shows the Keychain and not the Linux options
+- **AND** it ends with "If your environment has a safer way to guard credentials, use it instead."
+
+#### Scenario: Help on Linux
+- **WHEN** the agent runs `al help` on Linux
+- **THEN** the Link key section shows the Secret Service and the user-only-readable file fallback, and not the Keychain

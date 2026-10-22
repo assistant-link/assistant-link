@@ -15,6 +15,10 @@ The app SHALL open to a list of the user's Assistants, laid out like a messaging
 - **WHEN** the user opens the app and has no Assistants
 - **THEN** the home screen explains that no Assistants exist yet and offers to create one
 
+#### Scenario: Assistant with events but no Links
+- **WHEN** an Assistant has events but no Assistant Links
+- **THEN** the service returns its latest event as `latest_event`, which is null only when the Assistant has no events
+
 #### Scenario: Latest message from the Assistant
 - **WHEN** the latest event of "Hermes" is its message "Done. I set a reminder." at 9:41 AM
 - **THEN** the "Hermes" entry shows "Done. I set a reminder." and "9:41 AM"

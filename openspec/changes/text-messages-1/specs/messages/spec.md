@@ -22,6 +22,10 @@ The user SHALL be able to send a text message to an Assistant that has at least 
 ### Requirement: Message text
 The text of a message SHALL have 1 to 4,000 Unicode code points (scalar values) and SHALL NOT consist only of Unicode White_Space characters. The app, `al`, and the service SHALL count and test it the same way.
 
+#### Scenario: NUL character
+- **WHEN** a text contains U+0000
+- **THEN** the service responds `422` `invalid_params` on both endpoints and stores nothing
+
 #### Scenario: Counted in code points
 - **WHEN** a text holds 4,000 emoji, each one code point
 - **THEN** it is valid, and one more makes it too long
@@ -38,8 +42,12 @@ The service SHALL keep each message of the user available for delivery to Assist
 - **THEN** no Assistant Link receives it
 - **AND** the Timeline still shows it
 
+#### Scenario: Retention passes while in flight
+- **WHEN** a message is in flight, unacknowledged, and the retention passes before the service resends it
+- **THEN** the service drops it instead of resending, the cursor does not move, and it delivers the next deliverable event
+
 ### Requirement: Delivery to every Assistant Link
-The service SHALL deliver each message of the user to every Assistant Link of the Assistant, in the order the messages were stored, as an event of type `text_message`. An Assistant Link SHALL receive only messages sent after it was paired: its cursor starts, in the pairing transaction, at the Assistant's last event sequence, read under the Assistant's row lock. An unpaired Assistant Link has no cursor and SHALL receive nothing.
+The service SHALL deliver each message of the user to every Assistant Link of the Assistant, in the order the messages were stored, as an event of type `text_message`. An Assistant Link SHALL receive only messages sent after it was paired: its cursor starts, in the pairing transaction, at the Assistant's last event sequence. An unpaired Assistant Link has no token and no connection, so it receives nothing.
 
 #### Scenario: Two Assistant Links
 - **WHEN** the Assistant has online Assistant Links "Link 1" and "Link 2" and the user sends a message
@@ -53,10 +61,13 @@ The service SHALL deliver each message of the user to every Assistant Link of th
 - **WHEN** the user sent a message before "Link 3" was paired
 - **THEN** "Link 3" does not receive it
 
-#### Scenario: Message committed after pairing
-- **WHEN** a message took its sequence number after "Link 3" was paired but commits after the pairing
+#### Scenario: Message after pairing
+- **WHEN** the user sends a message after "Link 3" was paired
 - **THEN** "Link 3" receives it
-- **AND** a message that took its sequence number before the pairing is not delivered to "Link 3", even if it commits after
+
+#### Scenario: Message at the moment of pairing
+- **WHEN** the user sends a message at the same moment "Link 3" is paired
+- **THEN** "Link 3" may or may not receive it, and either outcome is correct
 
 ### Requirement: Delivery cursor and catch-up
 The service SHALL keep one cursor per Assistant Link: the last event the Assistant Link acknowledged. It SHALL send an Assistant Link one unacknowledged event at a time, in order, and only the acknowledgement SHALL advance the cursor. When an Assistant Link connects, the service SHALL send it, in order, every deliverable event after its cursor that is within the delivery retention. The agent SHALL NOT need to remember a position.
@@ -78,7 +89,7 @@ The service SHALL keep one cursor per Assistant Link: the last event the Assista
 - **THEN** only the newest connection receives it, and the other receives it only if the newest closes or answers with an error before acknowledging
 
 ### Requirement: Deliverable events
-The service SHALL deliver only the user's `text_message` events. Events that are not deliverable, such as `link_created`, SHALL be skipped by the cursor.
+The service SHALL deliver only the user's `text_message` events, including one whose content was deleted (see "Message without its text"). Events that are not deliverable, such as `link_created`, SHALL be skipped by the cursor. The cursor SHALL move only by acknowledgement.
 
 #### Scenario: Link created events are skipped
 - **WHEN** "Link 1" has a cursor before a `link_created` event and a later message
@@ -96,11 +107,15 @@ The service SHALL order events by a per-Assistant sequence assigned when they ar
 - **THEN** its cursor stays at "b" and it does not receive "b" again
 
 ### Requirement: Message states
-The app SHALL show each of the user's messages as "Sending…" while it waits for the service, "Sent" once the service stored it, and "Delivered" once at least one Assistant Link acknowledged it. Only the latest of the user's messages SHALL show "Sent" or "Delivered". The Assistant's messages SHALL show no state. The app SHALL learn that a message was delivered through the notification `event.updated` on its live connection.
+The app SHALL show each of the user's messages as "Sending…" until the post to the service is answered, "Sent" once the service stored it, and "Delivered" once at least one Assistant Link acknowledged it. Only the latest of the user's messages SHALL show "Sent" or "Delivered". The Assistant's messages SHALL show no state. The app SHALL learn of delivery through `event.updated`, and of storage through `event.created`, on its live connection.
 
 #### Scenario: Sent
 - **WHEN** the service responds that it stored the message
 - **THEN** the caption "Sending…" is replaced by "Sent"
+
+#### Scenario: Stored event arrives first
+- **WHEN** the message is still "Sending…" and its stored event arrives over the live connection before the post is answered
+- **THEN** the message shows "Sent"
 
 #### Scenario: Delivered
 - **WHEN** an Assistant Link acknowledges the message while the conversation is open
@@ -119,15 +134,19 @@ The app SHALL show each of the user's messages as "Sending…" while it waits fo
 - **THEN** it shows its current state
 
 ### Requirement: Not Delivered messages
-A message SHALL show a red exclamation mark to the right of its bubble and the red caption "Not Delivered" only for a real failure: the service rejected it or could not be reached, with no response after 15 seconds counting as not reached; or no Assistant Link acknowledged it within the delivery retention. An offline Assistant SHALL NOT make a message Not Delivered. Tapping a message the app could not send SHALL offer "Try Again" and "Cancel".
+A message SHALL show a red exclamation mark to the right of its bubble and the red caption "Not Delivered" only for a real failure: the service answered the post with an error, or the post failed for a real network reason (connection lost, the system request timeout); or no Assistant Link acknowledged it within the delivery retention. An offline Assistant SHALL NOT make a message Not Delivered. Tapping a message the app could not send SHALL offer "Try Again" and "Cancel".
 
 #### Scenario: Service not reachable
 - **WHEN** the user sends a message and the app cannot reach the service
 - **THEN** the message shows the red exclamation mark and "Not Delivered"
 
-#### Scenario: No response
-- **WHEN** the service gives no response within 15 seconds
-- **THEN** the message shows "Not Delivered"
+#### Scenario: Error response
+- **WHEN** the service answers the post with an error
+- **THEN** the message shows "Not Delivered" with "Try Again"
+
+#### Scenario: Slow response
+- **WHEN** the service takes a long time to answer and the system request has not timed out
+- **THEN** the message keeps showing "Sending…"
 
 ### Requirement: Not Delivered after the delivery retention
 A message of the user that no Assistant Link acknowledged (`delivered_at` null) and that is older than the delivery retention SHALL be Not Delivered. The service SHALL derive this when it returns the message, not store it or run a job for it. The message SHALL show "Not Delivered", be final, and offer no "Try Again".
@@ -151,7 +170,7 @@ The service SHALL record when the first Assistant Link acknowledged a message (`
 - **THEN** `delivered_at` holds the time of "Link 1"'s acknowledgement and "Link 2"'s changes nothing
 
 ### Requirement: Retry a message the app could not send
-Each message the app sends SHALL carry an `idempotency_key`, which the service returns in the message so the app can match its local bubble to the stored one. The user SHALL be able to retry a message the app could not send by posting it again with the same `idempotency_key`. If the service had stored the first request, it SHALL return the stored message with `200` and store nothing new; otherwise it SHALL store the message, at that time, so it appears at the bottom of the Timeline.
+Each message the app sends SHALL carry an `idempotency_key`, a UUIDv7 string the service returns in the message so the app can match its local bubble to the stored one. The user SHALL be able to retry a message the app could not send by posting it again with the same `idempotency_key`. If the service had stored the first request, it SHALL return the stored message with `200` and store nothing new, even if its text was deleted (same Assistant, text not compared); otherwise it SHALL store it then.
 
 #### Scenario: Try Again succeeds
 - **WHEN** the user taps a "Not Delivered" message, chooses "Try Again", and the service is reachable
@@ -165,9 +184,18 @@ Each message the app sends SHALL carry an `idempotency_key`, which the service r
 - **WHEN** a message is posted again with the `idempotency_key` of a stored message
 - **THEN** the service returns the stored message in its current state and stores no second one
 
+#### Scenario: Missing or malformed idempotency_key
+- **WHEN** the app endpoint receives a message without an `idempotency_key`, or one that is not a UUIDv7
+- **THEN** the service responds `422` `invalid_params` and stores nothing
+
 #### Scenario: Reused idempotency_key
 - **WHEN** a message is posted with the `idempotency_key` of a stored message but a different text or Assistant
 - **THEN** the service rejects it with `409` `idempotency_key_conflict` and stores nothing
+
+#### Scenario: Reused idempotency_key of a deleted message
+- **WHEN** a message is posted with the `idempotency_key` of a stored message whose text was deleted, for the same Assistant
+- **THEN** the service responds `200` with the stored (deleted) event without comparing text, and stores nothing
+- **AND** for another Assistant it responds `409` `idempotency_key_conflict`
 
 ### Requirement: Messages from the Assistant
 An agent SHALL be able to send a text message to the user as its Assistant with `POST /alp/v1/messages`, whether or not its Assistant Link is online. The service SHALL store it, attribute it to the Assistant of that Link, and send the notification `event.created` to the account's open app connections. The app SHALL show it at the bottom of the open conversation within 2 seconds. The service SHALL NOT deliver it to the Assistant's Assistant Links.
@@ -188,8 +216,23 @@ An agent SHALL be able to send a text message to the user as its Assistant with 
 - **WHEN** the agent on "Link 1" sends a message
 - **THEN** the agent on "Link 2" receives no event for it
 
+### Requirement: Live notification of stored messages
+The service SHALL send `event.created` for every stored `text_message`, the user's too, to every app connection of the account. The sending app SHALL match it to its local bubble by `idempotency_key`; other app connections SHALL append it.
+
+#### Scenario: User's message on the live connection
+- **WHEN** the user's app sends a message and the service stores it
+- **THEN** every app connection of the account receives `event.created` for it; the sending app matches it to its "Sending…" bubble by `idempotency_key` and the others append it
+
 ### Requirement: Message history
-The service SHALL store every item of an Assistant's Timeline as an event until the account is purged and return them oldest first, the latest 50 by default and earlier ones on request.
+The service SHALL store every item of an Assistant's Timeline as an event until the account is purged and return them oldest first, the latest 50 by default and earlier ones on request. Events use the nested format: `id`, `type`, `created_at`, `deleted` (always present), and the content under a key named after the type; the app API adds `assistant_id`, `sender`, `link_id`, `delivery_status`, and `idempotency_key`.
+
+#### Scenario: Event shape in the app
+- **WHEN** the app loads the history and it holds the user's message "Hi"
+- **THEN** the event is `{"id", "assistant_id", "type": "text_message", "sender": "user", "link_id": null, "created_at", "deleted": false, "delivery_status", "idempotency_key", "text_message": {"text": "Hi"}}`
+
+#### Scenario: Deleted and Link events have no content key
+- **WHEN** the history holds a deleted message and an "Assistant Link created" event
+- **THEN** the deleted message has `"deleted": true` and no `text_message` key, and the Link event has no content key
 
 #### Scenario: Link created event in the history
 - **WHEN** an Assistant Link is created for "Hermes"
@@ -212,12 +255,15 @@ The service SHALL store every item of an Assistant's Timeline as an event until 
 - **THEN** the service responds as if the Assistant does not exist
 
 ### Requirement: Message without its text
-A `text_message` event whose text was deleted on its own SHALL stay in the Timeline with no text, be shown as a neutral placeholder bubble "Message unavailable", and SHALL NOT be delivered to any Assistant Link; the cursor SHALL move past it.
+A `text_message` event whose content was deleted on its own SHALL stay in the Timeline as a deleted event, with `"deleted": true` and no content key. It SHALL be delivered to Assistant Links like any other event, and the app SHALL show it as a neutral placeholder bubble "This message was deleted". The cursor SHALL move only by acknowledgement.
 
-#### Scenario: Text deleted, event kept
-- **WHEN** the text of a message was deleted and the user opens the conversation
-- **THEN** the Timeline shows "Message unavailable" in its place
-- **AND** a connecting Assistant Link does not receive it and receives the messages after it
+#### Scenario: Deleted message in the history
+- **WHEN** the content of a message was deleted and the user opens the conversation
+- **THEN** the Timeline shows the placeholder bubble "This message was deleted" in its place
+
+#### Scenario: Agent receives a deleted event
+- **WHEN** a connecting Assistant Link has a deleted message after its cursor
+- **THEN** it receives that event with `"deleted": true` and no `text_message` key, and then the messages after it, each after the acknowledgement of the one before
 
 ### Requirement: Messages in the Timeline
 The conversation screen SHALL show the events returned by the history, messages and "Assistant Link created" events together, oldest first, with the newest at the bottom, and SHALL scroll to the newest on open. The app SHALL NOT derive "Assistant Link created" events itself. The user's messages SHALL be right-aligned and the Assistant's left-aligned. When earlier events exist, the screen SHALL show "Load Earlier Messages" at the top.

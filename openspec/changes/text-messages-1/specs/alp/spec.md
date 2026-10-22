@@ -11,14 +11,18 @@ The service SHALL accept a WebSocket connection at `GET /alp/v1/connect` authent
 ## ADDED Requirements
 
 ### Requirement: Event delivery request
-The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: an object with a stable `id` and a `type`, the only fields required on every event, plus the fields of its type. The type `text_message` has `text` and `sent_at` (RFC 3339 UTC). Only the user's text messages are delivered in this revision. The JSON-RPC request `id` SHALL be the event's `id`.
+The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: `id`, `type`, `created_at` (RFC 3339 UTC), and `deleted` (boolean), always present, plus the content under a key named after the type (`text_message`: `{"text"}`). A deleted event has `"deleted": true` and no content key. Only the user's text messages are delivered in this revision. The JSON-RPC request `id` SHALL be the event's `id`.
 
 #### Scenario: Message delivered
 - **WHEN** the user sends "Hi" to an Assistant that has an online Assistant Link
-- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "event.deliver", "params": {"id": ..., "type": "text_message", "text": "Hi", "sent_at": ...}}`
+- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "event.deliver", "params": {"id": ..., "type": "text_message", "created_at": ..., "deleted": false, "text_message": {"text": "Hi"}}}`
+
+#### Scenario: Deleted message delivered
+- **WHEN** the content of a message was deleted and its event is next for an online Assistant Link
+- **THEN** the agent receives `event.deliver` with params `{"id": ..., "type": "text_message", "created_at": ..., "deleted": true}` and no `text_message` key
 
 ### Requirement: Event acknowledgement
-A result object, which MAY be empty, SHALL acknowledge the event: the Assistant Link's cursor advances and, for the user's message, `delivered_at` is set if it was still null. An error response SHALL mean the agent did not take it.
+A result object, which MAY be empty, SHALL acknowledge the event: the Assistant Link's cursor advances and, for the user's message, `delivered_at` is set if it was still null. An error response SHALL mean the agent did not take it, but only when it comes from the connection the event was last sent to; an error from any other connection SHALL be ignored.
 
 #### Scenario: Acknowledged
 - **WHEN** the agent responds to `event.deliver` with `{"jsonrpc": "2.0", "id": ..., "result": {}}`
@@ -30,6 +34,14 @@ The service SHALL accept a response for the event currently in flight as its ack
 #### Scenario: Late response
 - **WHEN** the agent responds to the event in flight after 30 seconds, before the service sent it again
 - **THEN** the cursor advances and the retry is cancelled
+
+#### Scenario: Late result from another connection
+- **WHEN** the service sent the event to a second connection after the first failed, and the first then responds with a `result`
+- **THEN** the cursor advances and the retry is cancelled
+
+#### Scenario: Late error from another connection
+- **WHEN** the service sent the event to a second connection and the first then responds with an error
+- **THEN** the service ignores it and the event stays in flight on the second connection
 
 #### Scenario: Response for another id
 - **WHEN** the agent responds with an id that is not the event in flight
@@ -54,7 +66,7 @@ Later event types SHALL be added with new `type` values and SHALL use the `event
 - **THEN** it ignores the event's unknown parts and keeps the connection, and it acknowledges the event if it took it
 
 ### Requirement: Delivery errors and duplicates
-An agent that does not implement `event.deliver` SHALL respond with `-32601`. An agent that cannot take an event SHALL respond to `event.deliver` with error `-32001` and `data.reason` `not_received`. An event whose request got an error, a closed connection, or no response within 30 seconds stays unacknowledged, and the service SHALL send it again with the same `id`. Delivery is at least once, so a reader SHALL dedupe by `id`.
+An agent that does not implement `event.deliver` SHALL respond with `-32601`. An agent that cannot take an event SHALL respond to `event.deliver` with error `-32001` and `data.reason` `not_received`. An event whose request got an error, a closed connection, or no response within 30 seconds stays unacknowledged, and the service SHALL send it again with the same `id`. Delivery is at least once, so a reader that must not see an event twice SHALL dedupe by `id`.
 
 #### Scenario: Agent cannot take the event
 - **WHEN** an agent responds to `event.deliver` with error `-32001` and `data.reason` `not_received`
@@ -80,11 +92,11 @@ The service SHALL send an unacknowledged event to the Assistant Link's next-newe
 - **THEN** the service waits 60 seconds before the next round
 
 ### Requirement: Send a message to the user
-The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token, accepting `{"text": "<message>"}` and responding `201` with `{"message_id", "sent_at"}`. It SHALL accept the request whether or not the Assistant Link is online, and SHALL NOT change its presence or last active time. The text SHALL have 1 to 4,000 Unicode code points (scalar values) and SHALL NOT consist only of Unicode White_Space characters; otherwise the response SHALL be `422` and nothing stored.
+The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token, accepting `{"text": "<message>"}` and responding `201` with `{"message_id", "created_at"}`. It SHALL accept the request whether or not the Assistant Link is online, and SHALL NOT change its presence or last active time. Text outside the message text rules (1 to 4,000 code points, not only White_Space, no U+0000) SHALL get `422` and nothing stored.
 
 #### Scenario: Message sent
 - **WHEN** an agent posts `{"text": "Your reminder is set."}` with its Link token
-- **THEN** the response is `201` with `message_id` and `sent_at`
+- **THEN** the response is `201` with `message_id` and `created_at`
 - **AND** the message appears in the Timeline of the Assistant Link's Assistant
 
 #### Scenario: Assistant Link offline
@@ -92,19 +104,27 @@ The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token,
 - **THEN** the response is `201` and the Assistant Link stays offline
 
 #### Scenario: Invalid text
-- **WHEN** an agent posts text that is empty or only whitespace, or longer than 4,000 code points, or no string `text`
-- **THEN** the response is `422` with `text_empty`, `text_too_long`, or `invalid_params` respectively, and nothing is stored
+- **WHEN** an agent posts text that is empty or only whitespace, or longer than 4,000 code points, or no string `text`, or text containing U+0000
+- **THEN** the response is `422` with `text_empty`, `text_too_long`, or `invalid_params` (no string `text`, or U+0000) respectively, and nothing is stored
 
 #### Scenario: Missing token
 - **WHEN** an agent posts a message without an `Authorization` header
 - **THEN** the service responds `401` with `unauthorized`
 
 ### Requirement: Idempotent send
-`POST /alp/v1/messages` SHALL accept an optional `idempotency_key` (string, unique per Assistant Link). A request repeating an `idempotency_key` SHALL respond `200` with the stored message's `{"message_id", "sent_at"}` and store nothing, unless its text differs, which SHALL be `409` `idempotency_key_conflict`.
+`POST /alp/v1/messages` SHALL accept an optional `idempotency_key`, a UUIDv7 string, unique per Assistant Link; a malformed one SHALL be `422` `invalid_params`. A request repeating an `idempotency_key` SHALL respond `200` with the stored message's `{"message_id", "created_at"}` and store nothing, unless its text differs, which SHALL be `409` `idempotency_key_conflict`; if the stored message's text was deleted, the repeat SHALL respond `200` with the stored message without comparing text.
 
 #### Scenario: Repeated idempotency_key
 - **WHEN** an agent posts the same `idempotency_key` and text twice
 - **THEN** the second response is `200` with the same `message_id` and the Timeline holds one message
+
+#### Scenario: Repeated idempotency_key of a deleted message
+- **WHEN** an agent posts an `idempotency_key` whose stored message's text was deleted
+- **THEN** the response is `200` with the same `message_id`, whatever the text, and nothing is stored
+
+#### Scenario: Malformed idempotency_key
+- **WHEN** an agent posts an `idempotency_key` that is not a UUIDv7
+- **THEN** the response is `422` with `invalid_params` and nothing is stored
 
 #### Scenario: Reused idempotency_key with other text
 - **WHEN** an agent posts an `idempotency_key` it already used with a different text
