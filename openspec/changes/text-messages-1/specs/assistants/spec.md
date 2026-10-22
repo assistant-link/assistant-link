@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Assistant list is the home screen
-The app SHALL open to a list of the user's Assistants, laid out like a messaging app's conversation list. Each entry SHALL show the Assistant's avatar, name, whether it is online, and its most recent event with that event's time. The most recent event is the latest event of the Assistant's Timeline (a message or "Assistant Link created"), as returned by the service. A message SHALL be shown as its text on one line, truncated, with the prefix "You: " when the user sent it; a message of the user that is Not Delivered SHALL also show a red exclamation mark before the text.
+The app SHALL open to a list of the user's Assistants, laid out like a messaging app's conversation list. Each entry SHALL show the Assistant's avatar, name, whether it is online, and its most recent event with that event's time. The most recent event is the latest event of the Assistant's Timeline (a message or "Assistant Link created"), as returned by the service. A message SHALL be shown as its text on one line, truncated, with the prefix "You: " when the user sent it; a message of the user that is Not Delivered, whether the service reports it past the delivery retention or it failed in the app and was never stored (known from the app's local state), SHALL also show a red exclamation mark before the text.
 
 #### Scenario: Home screen shows Assistants
 - **WHEN** the user opens the app and has Assistants "Hermes", "Grok Bot", and "Muse"
@@ -15,10 +15,6 @@ The app SHALL open to a list of the user's Assistants, laid out like a messaging
 - **WHEN** the user opens the app and has no Assistants
 - **THEN** the home screen explains that no Assistants exist yet and offers to create one
 
-#### Scenario: Assistant with events but no Links
-- **WHEN** an Assistant has events but no Assistant Links
-- **THEN** the service returns its latest event as `latest_event`, which is null only when the Assistant has no events
-
 #### Scenario: Latest message from the Assistant
 - **WHEN** the latest event of "Hermes" is its message "Done. I set a reminder." at 9:41 AM
 - **THEN** the "Hermes" entry shows "Done. I set a reminder." and "9:41 AM"
@@ -30,6 +26,10 @@ The app SHALL open to a list of the user's Assistants, laid out like a messaging
 #### Scenario: Not Delivered message
 - **WHEN** the latest event of "Muse" is the user's message "Are you there?" that no Assistant Link took within the delivery retention
 - **THEN** the "Muse" entry shows a red exclamation mark before "You: Are you there?"
+
+#### Scenario: Message that failed in the app
+- **WHEN** the user's latest message to "Muse" failed to send in the app and was never stored
+- **THEN** the "Muse" entry shows a red exclamation mark before "You: " and that message's text, from the app's local state
 
 #### Scenario: Assistant Link event newer than any message
 - **WHEN** an Assistant Link was created for "Hermes" after its last message

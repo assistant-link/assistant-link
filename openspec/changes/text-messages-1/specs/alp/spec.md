@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Agent connection speaks JSON-RPC 2.0
-The service SHALL accept a WebSocket connection at `GET /alp/v1/connect` authenticated by a Link token. Every text frame in either direction SHALL contain exactly one JSON-RPC 2.0 message (request, response, or notification); batches SHALL NOT be used. Service-to-agent events SHALL be JSON-RPC notifications, except an event whose delivery the service must confirm, which SHALL be a JSON-RPC request the agent answers. The service SHALL accept the agent's responses and match them to its requests by `id`; a response with an unknown or expired `id` SHALL be ignored and the connection stays open. Immediately after accepting a connection the service SHALL send the notification `connection.ready` with params `link_id`, `assistant_name`, and `protocol_version` (`"1"`). While the connection is open the Assistant Link SHALL count as online.
+The service SHALL accept a WebSocket connection at `GET /alp/v1/connect` authenticated by a Link token. Every text frame in either direction SHALL contain exactly one JSON-RPC 2.0 message (request, response, or notification); batches SHALL NOT be used. Service-to-agent events SHALL be JSON-RPC notifications, except an event whose delivery the service must confirm, which SHALL be a JSON-RPC request the agent answers. The service SHALL accept the agent's responses and match them to its requests by `id`; a response whose `id` is unknown or expired SHALL complete no request (no timeout or error effect) and the connection stays open, but a `result` carrying an `event_id` SHALL still be passed to the delivery logic (see "Event acknowledgement"). Immediately after accepting a connection the service SHALL send the notification `connection.ready` with params `link_id`, `assistant_name`, and `protocol_version` (`"1"`). While the connection is open the Assistant Link SHALL count as online.
 
 #### Scenario: Successful connection
 - **WHEN** an agent opens `/alp/v1/connect` with a valid Link token
@@ -11,7 +11,7 @@ The service SHALL accept a WebSocket connection at `GET /alp/v1/connect` authent
 ## ADDED Requirements
 
 ### Requirement: Event delivery request
-The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: `id`, `type`, `created_at` (RFC 3339 UTC), and `deleted` (boolean), always present, plus the content under a key named after the type (`text_message`: `{"text"}`). A deleted event has `"deleted": true` and no content key. Only the user's text messages are delivered in this revision. The JSON-RPC request `id` SHALL be the event's `id`.
+The service SHALL deliver an event to the agent with the request `event.deliver`, whose params are the event: `id`, `type`, `created_at` (RFC 3339 UTC), and `deleted` (boolean), always present, plus the content under a key named after the type (`text_message`: `{"text"}`). A deleted event has `"deleted": true` and no content key. Only the user's text messages are delivered in this revision.
 
 #### Scenario: Message delivered
 - **WHEN** the user sends "Hi" to an Assistant that has an online Assistant Link
@@ -21,31 +21,54 @@ The service SHALL deliver an event to the agent with the request `event.deliver`
 - **WHEN** the content of a message was deleted and its event is next for an online Assistant Link
 - **THEN** the agent receives `event.deliver` with params `{"id": ..., "type": "text_message", "created_at": ..., "deleted": true}` and no `text_message` key
 
+### Requirement: JSON-RPC request ids
+Each side SHALL number its own JSON-RPC requests with a plain counter per connection: the service numbers its requests, the agent numbers its own. A request `id` SHALL be used only inside the JSON-RPC layer, to pair a response with its request (timeouts and errors), and SHALL NOT be an event id or any other domain id. A response with an unknown or expired `id` SHALL complete no request and SHALL NOT close the connection; only a `result` carrying an `event_id` still has an effect.
+
+#### Scenario: Counters on both sides
+- **WHEN** the service sends two `event.deliver` requests on a connection and the agent sends its own request
+- **THEN** the service's requests carry consecutive counter values, the agent's request carries a value of the agent's own counter, and none of them is an event id
+
+#### Scenario: Response with an unknown request id
+- **WHEN** the agent responds with an error, or a result without an `event_id`, whose request `id` the service did not send on that connection or has expired
+- **THEN** the service ignores it: no request completes, no timeout or error effect applies, and the connection stays open
+
+#### Scenario: Late result with an expired request id
+- **WHEN** the agent responds with a `result` carrying an `event_id` after the attempt timeout, so its request `id` is expired (or on a new connection, where the `id` is unknown)
+- **THEN** the event is still acknowledged by its `event_id`: the cursor advances and `delivered_at` is set, and the connection stays open
+
 ### Requirement: Event acknowledgement
-A result object, which MAY be empty, SHALL acknowledge the event: the Assistant Link's cursor advances and, for the user's message, `delivered_at` is set if it was still null. An error response SHALL mean the agent did not take it, but only when it comes from the connection the event was last sent to; an error from any other connection SHALL be ignored.
+The agent SHALL acknowledge an event by answering `event.deliver` with the result `{"event_id": "<the event id>"}`. The service SHALL mark the event acknowledged by that `event_id`, whichever request or connection the result came on and however late, even when its request `id` is unknown or expired: the Assistant Link's cursor advances (never back) and `delivered_at` is set if it was still null. Acknowledging an already-acknowledged event SHALL do nothing.
 
 #### Scenario: Acknowledged
-- **WHEN** the agent responds to `event.deliver` with `{"jsonrpc": "2.0", "id": ..., "result": {}}`
+- **WHEN** the agent responds to `event.deliver` with `{"jsonrpc": "2.0", "id": ..., "result": {"event_id": "<the event id>"}}`
 - **THEN** the Assistant Link's cursor advances to that event
 
-### Requirement: Late acknowledgement
-The service SHALL accept a response for the event currently in flight as its acknowledgement even if it arrives after the 30 seconds, and SHALL ignore a response for any other id.
-
-#### Scenario: Late response
-- **WHEN** the agent responds to the event in flight after 30 seconds, before the service sent it again
+#### Scenario: Late result
+- **WHEN** the agent responds with the `event_id` after 30 seconds, before the service sent the event again
 - **THEN** the cursor advances and the retry is cancelled
 
-#### Scenario: Late result from another connection
-- **WHEN** the service sent the event to a second connection after the first failed, and the first then responds with a `result`
+#### Scenario: Result on another connection
+- **WHEN** the service sent the event to a second connection after the first failed, and the first then responds with a `result` carrying the `event_id`
 - **THEN** the cursor advances and the retry is cancelled
 
-#### Scenario: Late error from another connection
-- **WHEN** the service sent the event to a second connection and the first then responds with an error
-- **THEN** the service ignores it and the event stays in flight on the second connection
+#### Scenario: Already acknowledged
+- **WHEN** a `result` arrives for an event that is already acknowledged
+- **THEN** nothing changes: the cursor does not move back, `delivered_at` keeps its time, and `event.updated` is not sent again
 
-#### Scenario: Response for another id
-- **WHEN** the agent responds with an id that is not the event in flight
-- **THEN** the service ignores it and the connection stays open
+### Requirement: Failed and unusable responses
+An error response or no response within 30 seconds SHALL mean only that the attempt failed; a late error after the event is acknowledged changes nothing. A result whose `event_id` is unknown, belongs to another Link's Assistant, or is not deliverable to this Assistant Link (a type never delivered, `link_created`, or a `seq` at or below the Link's starting position at pairing) SHALL be ignored, with no error code. The delivery retention does not make an event undeliverable.
+
+#### Scenario: Late error
+- **WHEN** an error response for an event arrives after the event was acknowledged
+- **THEN** the service ignores it
+
+#### Scenario: Unusable event_id
+- **WHEN** a `result` carries an `event_id` that is unknown, belongs to another Link's Assistant, is a `link_created` event, or has a `seq` at or below the Link's starting position at pairing
+- **THEN** the service ignores it, advances nothing, and keeps the connection open
+
+#### Scenario: Result for an event past the retention
+- **WHEN** a `result` carries the `event_id` of a user message the delivery retention already dropped
+- **THEN** the event is acknowledged: the cursor advances and `delivered_at` is set
 
 ### Requirement: Event order, cursor, and catch-up
 For each Assistant Link the service SHALL send one `event.deliver` request at a time, in event order, and SHALL send the next only after the agent acknowledged the previous one. Acknowledgement SHALL advance the cursor the service keeps for that Assistant Link; the agent SHALL NOT send or keep a position. After `connection.ready`, the service SHALL send the events after the cursor that are within the delivery retention.

@@ -110,7 +110,7 @@ The service SHALL serve agent-facing install instructions (`install.md`) at the 
 - **THEN** standard output gets the same JSON line and only status messages on standard error are text
 
 ### Requirement: Acknowledge an event after writing it
-`al wait` SHALL have a single writer for standard output that never abandons a write, so it never prints a broken or interleaved line. It SHALL answer `event.deliver` with an empty result only after the line has been written and flushed: write, flush, then acknowledge. While a write is pending, it SHALL answer any further `event.deliver` with error `-32001` (`data.reason` `not_received`) and report it on standard error.
+`al wait` SHALL have a single writer for standard output that never abandons a write, so it never prints a broken or interleaved line. It SHALL answer `event.deliver` with the result `{"event_id": "<the event id>"}` (also for a repeat it suppresses) only after the line has been written and flushed: write, flush, then acknowledge. While a write is pending, it SHALL answer any further `event.deliver` with error `-32001` (`data.reason` `not_received`) and report it on standard error.
 
 #### Scenario: Nothing reads standard output
 - **WHEN** the process reading `al wait`'s standard output has stopped reading (the pipe is full), and a message arrives
@@ -121,6 +121,13 @@ The service SHALL serve agent-facing install instructions (`install.md`) at the 
 - **WHEN** the reader resumes reading
 - **THEN** the pending line is written whole and acknowledged, and later events follow in order
 
+### Requirement: Shutdown with a pending write
+On SIGINT or SIGTERM `al wait` SHALL exit as specified without waiting for a pending write. The event was not acknowledged, so the service redelivers it later.
+
+#### Scenario: Shutdown with a pending write
+- **WHEN** a write to standard output is pending (the reader stopped reading) and `al wait` receives SIGINT or SIGTERM
+- **THEN** it exits as specified without waiting for the write, and the event is not acknowledged, so the service sends it again later
+
 ### Requirement: Exit when standard output is closed
 If the write to standard output fails with a broken pipe, as opposed to a full pipe that keeps the write pending, `al wait` SHALL report it on standard error, close the connection, and exit with code 1, so the Assistant Link goes offline instead of rejecting every event while online.
 
@@ -130,11 +137,11 @@ If the write to standard output fails with a broken pipe, as opposed to a full p
 - **AND** the Assistant Link goes offline
 
 ### Requirement: Drop a repeat of the last event
-`al wait` SHALL remember the id of the last line it wrote and, when an event with that id arrives again, acknowledge it without writing. Since the service keeps one event in flight per Assistant Link, a repeat can only be the last event written; only a restart of `al wait`, or two `al wait` processes on one Link, can show the last event once more.
+`al wait` SHALL remember the id of the last line it wrote and, when an event with that id arrives again, acknowledge it, with its `event_id`, without writing. Since the service keeps one event in flight per Assistant Link, a repeat can only be the last event written; only a restart of `al wait`, or two `al wait` processes on one Link, can show the last event once more.
 
 #### Scenario: Same id arrives again
 - **WHEN** `al wait` wrote the line for a message, its connection dropped before the acknowledgement, and it reconnects
-- **THEN** the service sends the same event again, and `al wait` acknowledges it without writing the line a second time
+- **THEN** the service sends the same event again, and `al wait` acknowledges it with the `event_id` without writing the line a second time
 
 #### Scenario: Restart repeats the last event
 - **WHEN** `al wait` wrote the last line, was restarted before the acknowledgement reached the service, and starts again
