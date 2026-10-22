@@ -37,7 +37,7 @@ Each side SHALL number its own JSON-RPC requests with a plain counter per connec
 - **THEN** the event is still acknowledged by its `event_id`: the cursor advances and `delivered_at` is set, and the connection stays open
 
 ### Requirement: Event acknowledgement
-The agent SHALL acknowledge an event by answering `event.deliver` with the result `{"event_id": "<the event id>"}`. The service SHALL mark the event acknowledged by that `event_id`, whichever request or connection the result came on and however late, even when its request `id` is unknown or expired: the Assistant Link's cursor advances (never back) and `delivered_at` is set if it was still null. Acknowledging an already-acknowledged event SHALL do nothing.
+The agent SHALL acknowledge an event by answering `event.deliver` with the result `{"event_id": "<the event id>"}`. The service SHALL mark the event acknowledged by that `event_id`, whichever request or connection the result came on and however late, even when its request `id` is unknown or expired: the Assistant Link's cursor advances (never back) and `delivered_at` is set if it was still null. Acknowledging an event this Assistant Link already acknowledged SHALL do nothing.
 
 #### Scenario: Acknowledged
 - **WHEN** the agent responds to `event.deliver` with `{"jsonrpc": "2.0", "id": ..., "result": {"event_id": "<the event id>"}}`
@@ -52,8 +52,15 @@ The agent SHALL acknowledge an event by answering `event.deliver` with the resul
 - **THEN** the cursor advances and the retry is cancelled
 
 #### Scenario: Already acknowledged
-- **WHEN** a `result` arrives for an event that is already acknowledged
+- **WHEN** a `result` arrives for an event this Assistant Link already acknowledged
 - **THEN** nothing changes: the cursor does not move back, `delivered_at` keeps its time, and `event.updated` is not sent again
+
+### Requirement: Acknowledgement by several Links
+When several Assistant Links of an Assistant acknowledge the same event, only the first acknowledgement SHALL set `delivered_at` and send `event.updated`; every Assistant Link's own cursor SHALL still advance on its own acknowledgement.
+
+#### Scenario: Acknowledged by another Link first
+- **WHEN** "Link 1" acknowledged an event and then "Link 2" acknowledges the same event
+- **THEN** "Link 2"'s cursor advances to that event, while `delivered_at` keeps "Link 1"'s time and `event.updated` is not sent again
 
 ### Requirement: Failed and unusable responses
 An error response or no response within 30 seconds SHALL mean only that the attempt failed; a late error after the event is acknowledged changes nothing. A result whose `event_id` is unknown, belongs to another Link's Assistant, or is not deliverable to this Assistant Link (a type never delivered, `link_created`, or a `seq` at or below the Link's starting position at pairing) SHALL be ignored, with no error code.

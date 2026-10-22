@@ -142,7 +142,7 @@ The app SHALL show each of the user's messages as "Sending…" until the post to
 
 #### Scenario: First acknowledgement wins
 - **WHEN** "Link 1" and then "Link 2" acknowledge the same message
-- **THEN** `delivered_at` holds the time of "Link 1"'s acknowledgement and "Link 2"'s changes nothing
+- **THEN** `delivered_at` keeps the time of "Link 1"'s acknowledgement and `event.updated` is sent once, while each Link's own cursor advances past the message
 
 ### Requirement: Not Delivered messages
 A message SHALL show a red exclamation mark to the right of its bubble and the red caption "Not Delivered" only for a real failure: the service answered the post with an error, or the post failed for a real network reason (connection lost, the system request timeout). An offline Assistant, or a stored message no Assistant Link has taken, SHALL NOT make a message Not Delivered. Tapping a message the app could not send SHALL offer "Try Again" and "Cancel".
