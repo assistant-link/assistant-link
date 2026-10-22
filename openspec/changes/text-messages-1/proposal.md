@@ -11,21 +11,24 @@ Serves V1 job **1. Reach my assistant from anywhere**, and the first step of job
 ## What Changes
 
 - **iOS app:**
-  - The conversation screen gets a composer. A sent message shows "Sending…" until the service answers the post (no timer of the app's own), "Sent" once the service stored it, and "Delivered" once an Assistant Link acknowledged it. "Not Delivered" appears only for a real failure: the service answered with an error or the network failed ("Try Again"), or no Assistant Link took it within the delivery retention (derived when the message is read, not stored).
+  - The conversation screen gets a composer, shown only once the Assistant has at least one paired Assistant Link; until then it keeps guiding setup. A sent message shows "Sending…" until the service answers the post (no timer of the app's own), "Sent" once the service stored it, and "Delivered" once an Assistant Link acknowledged it. "Not Delivered" appears only for a real failure: the service answered with an error or the network failed ("Try Again"), or no Assistant Link took it within the delivery retention (derived when the message is read, not stored).
   - The Timeline mixes messages with "Assistant Link created" events, which now come from the service as part of the history instead of being derived by the app. History persists; the app loads the latest 50 and offers "Load Earlier Messages".
   - The Assistant's messages and changes to the state of the user's messages appear live while the app is open. While the Assistant is offline, a notice above the composer says messages will be delivered when it connects.
   - Each Assistant list row shows the latest message ("You: …" for the user's own) as its most recent event.
 - **Service:**
   - Stores every item of an Assistant's Timeline as an event until the account is purged, and serves history. "Assistant Link created" becomes a stored `link_created` event, written when the Link is created and backfilled for existing Links.
   - Keeps each message of the user available to Assistant Links for the delivery retention (7 days) and delivers it, in order, to every Assistant Link of the Assistant, tracking one read position (cursor) per Link. A Link that connects later catches up on what it missed within the retention.
+  - Rejects a message from the app to an Assistant with no paired Assistant Link with `422 no_paired_link` and stores nothing.
   - Accepts messages from the agent and pushes them to the app's live connection.
   - Log out becomes a soft delete: it sets `accounts.deleted_at`, the account behaves as deleted at once (credentials and Link tokens rejected, connections closed), and a periodic purge permanently deletes it, with its messages and everything else it owns, once the deletion grace period (default 60 days) has passed.
 - **ALP (additive within `/alp/v1`):**
   - `event.deliver`: a JSON-RPC *request* from the service to the agent whose params are the event (`{"id", "type": "text_message", "created_at", "deleted", "text_message": {"text"}}`: the common fields plus the content nested under the type). The agent's response acknowledges it and advances that Link's cursor.
   - `POST /alp/v1/messages`: the agent sends a message to the user; it answers `{message_id, created_at}`. `idempotency_key` is a UUIDv7 string, required from the app and optional from the agent.
+  - `GET /alp/v1/link`: the agent reads `{link_id, assistant_name, unread_count}`, the number of deliverable events waiting for the Link within the retention. It only counts: no delivery, no cursor move, no presence change.
 - **`al`:**
   - `al send`: sends a message from the agent to the user, with a fresh UUIDv7 `idempotency_key` per invocation and one attempt.
   - `al wait` writes each incoming event to standard output as one JSON object per line through a single writer that never interleaves, acknowledges it after the line is written, and drops a repeat of the last event. This defines the event format that later event types extend. A deleted message is delivered as an event with `"deleted": true`.
+  - `al status` now calls only `GET /alp/v1/link`: it never connects or makes the Link online, and reports `unread_count`.
   - `al help` is short and general; `al wait --help` and `al send --help` hold the details. The usage moves there from the agent `install.md`, which keeps only installing, pairing, the Link key, and verifying, and ends with "Run `al help` and follow it".
 
 ## Non-goals
@@ -49,8 +52,8 @@ Serves V1 job **1. Reach my assistant from anywhere**, and the first step of job
 
 ### Modified Capabilities
 
-- `alp`: adds the `event.deliver` request, its acknowledgement and error rules, and the `POST /alp/v1/messages` endpoint, and notes that a service-to-agent event that needs an acknowledgement is a request.
-- `agent-cli`: adds `al send`, `al help`, and the incoming-event format of `al wait`, modifies the install instructions, and extends the output, key input, and exit-code requirements to `al send`.
+- `alp`: adds the `event.deliver` request, its acknowledgement and error rules, and the `POST /alp/v1/messages` and `GET /alp/v1/link` endpoints, and notes that a service-to-agent event that needs an acknowledgement is a request.
+- `agent-cli`: adds `al send`, `al help`, and the incoming-event format of `al wait`, changes `al status` (HTTP only, adds `unread_count`), modifies the install instructions, and extends the output, key input, and exit-code requirements to `al send`.
 - `assistants`: the Assistant list's most recent event and the conversation screen include messages.
 - `app-account`: log out soft deletes the account (`deleted_at`), its data, including messages, is unreachable at once and permanently erased after the deletion grace period (default 60 days), one account per purge transaction, and each user left with no account is deleted; the log-out confirmation copy is unchanged.
 

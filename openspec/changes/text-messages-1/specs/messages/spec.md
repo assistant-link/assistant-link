@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Send a message to the Assistant
-The user SHALL be able to send a text message to an Assistant that has at least one Assistant Link, from a composer on the Assistant's conversation screen. The send button SHALL be disabled until the text is valid (see "Message text"). The service SHALL store every message it accepts and respond as soon as it is stored, whether or not any Assistant Link is online.
+The user SHALL be able to send a text message to an Assistant that has at least one paired Assistant Link, from a composer on the Assistant's conversation screen, shown only while one is paired. The send button SHALL be disabled until the text is valid (see "Message text"). The service SHALL store every message it accepts and respond as soon as it is stored, whether or not any Assistant Link is online.
 
 #### Scenario: Send a message
 - **WHEN** the user types "Remind me to call David" in the conversation with "Hermes" and taps send
@@ -19,8 +19,27 @@ The user SHALL be able to send a text message to an Assistant that has at least 
 - **WHEN** the service receives a message of 4,001 code points
 - **THEN** it rejects the request as invalid and stores nothing
 
+### Requirement: Messages need a paired Assistant Link
+The service SHALL reject a message to an Assistant with no paired Assistant Link (no Links, or only unpaired ones) with `422` `no_paired_link` and store nothing, checking inside the storing transaction, in the order of the scenario "Order of checks". `no_paired_link` does not apply to `POST /alp/v1/messages`, because a Link token implies a paired Link.
+
+#### Scenario: Order of checks
+- **WHEN** the service receives a post to `POST /api/v1/assistants/:id/messages`
+- **THEN** it checks authentication (`401`), then an unknown Assistant (`404`), then an `idempotency_key` already stored for the account (the idempotent repeat: `200` with the stored event, or `409` `idempotency_key_conflict`), then invalid params or text (`422` `invalid_params`, `text_empty`, `text_too_long`), and only then `no_paired_link` (`422`)
+
+#### Scenario: No paired Assistant Link
+- **WHEN** the service receives a valid new message for an Assistant with no Assistant Links, or only unpaired ones
+- **THEN** it responds `422` `no_paired_link` and stores nothing
+
+#### Scenario: Repeat after the Links changed
+- **WHEN** a message was stored and its `idempotency_key` is posted again after the Assistant has lost its paired Assistant Links
+- **THEN** the service responds `200` with the stored event, not `no_paired_link`
+
+#### Scenario: Invalid text before no paired Link
+- **WHEN** the service receives an empty text for an Assistant with no paired Assistant Link
+- **THEN** it responds `422` `text_empty`
+
 ### Requirement: Message text
-The text of a message SHALL have 1 to 4,000 Unicode code points (scalar values) and SHALL NOT consist only of Unicode White_Space characters. The app, `al`, and the service SHALL count and test it the same way.
+The text of a message SHALL have 1 to 4,000 Unicode code points (scalar values) and SHALL NOT consist only of Unicode White_Space characters. The service SHALL enforce these rules; the app SHALL disable the send button for text that breaks them, counting code points the same way; `al` SHALL NOT check the length and SHALL pass the text to the service unchanged.
 
 #### Scenario: NUL character
 - **WHEN** a text contains U+0000
@@ -45,6 +64,7 @@ The service SHALL keep each message of the user available for delivery to Assist
 #### Scenario: Retention passes while in flight
 - **WHEN** a message is in flight, unacknowledged, and the retention passes before the service resends it
 - **THEN** the service drops it instead of resending, the cursor does not move, and it delivers the next deliverable event
+- **AND** a `result` for the dropped message that arrives later is still its acknowledgement (see "Acknowledgement after the retention")
 
 ### Requirement: Delivery to every Assistant Link
 The service SHALL deliver each message of the user to every Assistant Link of the Assistant, in the order the messages were stored, as an event of type `text_message`. An Assistant Link SHALL receive only messages sent after it was paired: its cursor starts, in the pairing transaction, at the Assistant's last event sequence. An unpaired Assistant Link has no token and no connection, so it receives nothing.
@@ -162,8 +182,8 @@ The service SHALL record when the first Assistant Link acknowledged a message (`
 - **THEN** the message is Delivered and never shows "Not Delivered"
 
 #### Scenario: Acknowledgement after the retention
-- **WHEN** a message is older than the delivery retention and an Assistant Link's acknowledgement of it, already in flight, arrives
-- **THEN** `delivered_at` is set, the message is Delivered, and the service sends `event.updated`
+- **WHEN** a message is older than the delivery retention, the service dropped it from flight for that reason, and a `result` for it from an Assistant Link arrives later
+- **THEN** `delivered_at` is set (first write wins), the message is Delivered, the service sends `event.updated`, and the cursor advances with the monotonic update
 
 #### Scenario: First acknowledgement wins
 - **WHEN** "Link 1" and then "Link 2" acknowledge the same message
@@ -174,7 +194,8 @@ Each message the app sends SHALL carry an `idempotency_key`, a UUIDv7 string the
 
 #### Scenario: Try Again succeeds
 - **WHEN** the user taps a "Not Delivered" message, chooses "Try Again", and the service is reachable
-- **THEN** the message becomes "Sent" and moves to the bottom of the Timeline
+- **THEN** the message becomes "Sent"
+- **AND** if the service had not stored it before, it is stored now and appears at the bottom of the Timeline
 
 #### Scenario: Try Again fails
 - **WHEN** the user chooses "Try Again" and the service is still not reachable
@@ -183,6 +204,7 @@ Each message the app sends SHALL carry an `idempotency_key`, a UUIDv7 string the
 #### Scenario: The first request had arrived
 - **WHEN** a message is posted again with the `idempotency_key` of a stored message
 - **THEN** the service returns the stored message in its current state and stores no second one
+- **AND** the message keeps its original position in the Timeline
 
 #### Scenario: Missing or malformed idempotency_key
 - **WHEN** the app endpoint receives a message without an `idempotency_key`, or one that is not a UUIDv7
@@ -278,7 +300,7 @@ The conversation screen SHALL show the events returned by the history, messages 
 - **AND** tapping it loads the 50 before them without moving the messages on screen
 
 ### Requirement: Assistant offline notice
-While the Assistant is offline, the conversation screen SHALL show above the composer the notice "<name> is offline. Messages will be delivered when it connects.", and SHALL keep the composer enabled. The notice SHALL appear and disappear with the Assistant's live status.
+While the Assistant is offline, the conversation screen SHALL show above the composer the notice "<name> is offline. Messages will be delivered when it connects.", and SHALL keep the composer enabled. The notice SHALL appear and disappear with the Assistant's live status. The notice SHALL never appear for an Assistant with only unpaired Links, which has no composer.
 
 #### Scenario: Assistant goes offline
 - **WHEN** the conversation with "Hermes" is open and its only Assistant Link goes offline
@@ -287,3 +309,7 @@ While the Assistant is offline, the conversation screen SHALL show above the com
 #### Scenario: Assistant comes back
 - **WHEN** the notice is shown and an Assistant Link of "Hermes" comes online
 - **THEN** the notice disappears within 2 seconds
+
+#### Scenario: Only unpaired Links
+- **WHEN** the Assistant's only Assistant Link is not paired
+- **THEN** the screen shows no composer and no offline notice

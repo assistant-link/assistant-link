@@ -36,7 +36,7 @@ The app SHALL open to a list of the user's Assistants, laid out like a messaging
 - **THEN** the "Hermes" entry shows "Assistant Link created"
 
 ### Requirement: Assistant screen
-Opening an Assistant SHALL show its conversation screen, headed by a bubble with the Assistant's avatar, name, and connection status. Tapping the bubble SHALL open the Assistant's details: its avatar, name, status, and Assistant Links. While the Assistant has no Assistant Links, the conversation screen SHALL guide the user to create one. Once it has at least one, the screen SHALL show the Assistant's Timeline, which the service stores and which holds its messages and an "Assistant Link created" system event for each of its Links, written when the Link is created, oldest first, with a composer below it (see `messages`).
+Opening an Assistant SHALL show its conversation screen, headed by a bubble with the Assistant's avatar, name, and connection status. Tapping the bubble SHALL open the Assistant's details: its avatar, name, status, and Assistant Links. While the Assistant has no Assistant Links, the conversation screen SHALL guide the user to create one. Once it has at least one, the screen SHALL show the Assistant's Timeline, which the service stores and which holds its messages and an "Assistant Link created" system event for each of its Links, written when the Link is created, oldest first. The screen SHALL show a composer below the Timeline only while the Assistant has at least one paired Assistant Link (see `messages`); until then it SHALL keep guiding setup, offering an unpaired Link's pairing text.
 
 #### Scenario: No Links yet
 - **WHEN** the user opens an Assistant that has no Assistant Links
@@ -46,7 +46,15 @@ Opening an Assistant SHALL show its conversation screen, headed by a bubble with
 #### Scenario: Link created
 - **WHEN** the user creates an Assistant Link for "Hermes"
 - **THEN** the conversation for "Hermes" shows the system event "Assistant Link created" with the time it was created
-- **AND** the screen shows a composer
+
+#### Scenario: Only Link unpaired
+- **WHEN** the user opens an Assistant whose only Assistant Link is not paired yet
+- **THEN** the screen still guides setup and offers the Link's pairing text
+- **AND** the screen has no composer
+
+#### Scenario: Link paired
+- **WHEN** the agent pairs the only Assistant Link of "Hermes" while its conversation is open
+- **THEN** the screen shows a composer
 
 #### Scenario: Opening the details
 - **WHEN** the user taps the bubble with the Assistant's name

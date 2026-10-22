@@ -129,3 +129,22 @@ The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token,
 #### Scenario: Reused idempotency_key with other text
 - **WHEN** an agent posts an `idempotency_key` it already used with a different text
 - **THEN** the response is `409` with `idempotency_key_conflict` and nothing is stored
+
+### Requirement: Read the Link's status
+The service SHALL expose `GET /alp/v1/link`, authenticated by a Link token with the same authentication and error rules as `POST /alp/v1/messages`, and respond `200` with `{"link_id", "assistant_name", "unread_count"}`: the number of the user's deliverable events after the Link's `last_read_seq` within the delivery retention. It SHALL only count: no event is read, delivered, or acknowledged, and the cursor, presence, and last active time do not change. It is additive within `/alp/v1`.
+
+#### Scenario: Valid token
+- **WHEN** an agent calls `GET /alp/v1/link` with its Link token
+- **THEN** the response is `200` with `link_id`, `assistant_name`, and `unread_count`
+
+#### Scenario: Count of undelivered messages
+- **WHEN** the user has sent three messages after the Link's cursor, one of them older than the delivery retention, and the Assistant has a `link_created` event after the cursor
+- **THEN** `unread_count` is 2: the older message and `link_created` are not counted
+
+#### Scenario: Nothing changes
+- **WHEN** an agent calls `GET /alp/v1/link` for an offline Link with undelivered messages
+- **THEN** the Link's cursor is unchanged, no event is delivered, and the Link stays offline with an unchanged last active time
+
+#### Scenario: Bad token
+- **WHEN** the token is missing or unknown, or belongs to a deleted account
+- **THEN** the response is `401` with `unauthorized`

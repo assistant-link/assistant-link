@@ -23,6 +23,25 @@
 - **WHEN** neither `--key-file` nor `AL_LINK_KEY` is given, or the key file is missing, unreadable, or empty
 - **THEN** `al status` reports `check` `no_key` with a message naming `AL_LINK_KEY`, `--key-file`, and `al pair <code>`, and exits with the "no key" exit code
 
+### Requirement: Status
+`al status` SHALL check once whether the service accepts the supplied Link key by calling only `GET /alp/v1/link`; it SHALL NOT open the agent connection or make the Link online. It SHALL print `{"server", "link_id"?, "assistant_name"?, "unread_count"?, "check", "error"?}`: the service URL it uses, the Link id, Assistant name, and unread count the service reports (only when `accepted`), and the result of the check as `check`: `accepted`, `rejected`, `unreachable`, `no_key`, or `unexpected` (for example, a service that does not speak ALP, or an unexpected HTTP status). Any result other than `accepted` SHALL include `error` with a `code` and `message`. It SHALL exit 0 only if the key is accepted.
+
+#### Scenario: Not an Assistant Link service
+- **WHEN** the service URL answers `GET /alp/v1/link` with an unexpected HTTP status, such as `404`
+- **THEN** `al status` reports `check` `unexpected` and exits with the "unexpected error" exit code
+
+#### Scenario: Paired and reachable
+- **WHEN** the supplied Link key is valid and the service is reachable
+- **THEN** `al status` reports the Assistant name, Link id, `unread_count`, and `check` `accepted`, and exits 0
+
+#### Scenario: Key not accepted
+- **WHEN** the service does not accept the supplied Link key (for example, the account was deleted, or the key was issued by another service)
+- **THEN** `al status` reports `check` `rejected` with a message naming the service URL it used, and exits with the "rejected" exit code
+
+#### Scenario: Status leaves the Link alone
+- **WHEN** the agent runs `al status` for an offline Link with undelivered messages
+- **THEN** the Link stays offline, its cursor does not move, and no event is delivered
+
 ### Requirement: Wait (hold the connection)
 `al wait` SHALL open the agent connection and keep it open until interrupted, so the Assistant Link is online while it runs. It SHALL reconnect automatically after a lost connection, waiting longer between repeated failures (up to 30 seconds). It SHALL read the Link key once at startup and exit with the "no key" exit code when none is supplied. It SHALL stop and exit with the "rejected" exit code if the service rejects the Link key or closes the connection with reason `account_deleted`. On SIGINT or SIGTERM it SHALL close the connection cleanly and exit 0. Standard output SHALL be reserved for incoming events, written as defined in "Incoming events"; status messages SHALL go to standard error, one JSON object per line by default.
 
@@ -94,13 +113,21 @@ The service SHALL serve agent-facing install instructions (`install.md`) at the 
 `al wait` SHALL have a single writer for standard output that never abandons a write, so it never prints a broken or interleaved line. It SHALL answer `event.deliver` with an empty result only after the line has been written and flushed: write, flush, then acknowledge. While a write is pending, it SHALL answer any further `event.deliver` with error `-32001` (`data.reason` `not_received`) and report it on standard error.
 
 #### Scenario: Nothing reads standard output
-- **WHEN** the process reading `al wait`'s standard output has closed it or stopped reading, and a message arrives
+- **WHEN** the process reading `al wait`'s standard output has stopped reading (the pipe is full), and a message arrives
 - **THEN** the write stays pending and the message is not "Delivered" by this Assistant Link
 - **AND** any further `event.deliver` is answered with error `-32001` `not_received`, nothing is interleaved on standard output, and the Assistant Link stays online
 
 #### Scenario: Written once the reader is back
 - **WHEN** the reader resumes reading
 - **THEN** the pending line is written whole and acknowledged, and later events follow in order
+
+### Requirement: Exit when standard output is closed
+If the write to standard output fails with a broken pipe, as opposed to a full pipe that keeps the write pending, `al wait` SHALL report it on standard error, close the connection, and exit with code 1, so the Assistant Link goes offline instead of rejecting every event while online.
+
+#### Scenario: Standard output is closed
+- **WHEN** the process reading `al wait`'s standard output has closed it, and a write fails with a broken pipe
+- **THEN** `al wait` reports it on standard error, closes the connection, and exits with code 1
+- **AND** the Assistant Link goes offline
 
 ### Requirement: Drop a repeat of the last event
 `al wait` SHALL remember the id of the last line it wrote and, when an event with that id arrives again, acknowledge it without writing. Since the service keeps one event in flight per Assistant Link, a repeat can only be the last event written; only a restart of `al wait`, or two `al wait` processes on one Link, can show the last event once more.
@@ -164,7 +191,7 @@ The service SHALL serve agent-facing install instructions (`install.md`) at the 
 - **THEN** it lists each command in one line and points to `al <command> --help` for details, without the event format or the text rules
 
 ### Requirement: Subcommand help
-`al wait --help` SHALL describe receiving: one JSON line per event, the nested format, the stable `id` and that the last event may repeat once after a restart, that missed events arrive first, and deleted events. `al send --help` SHALL describe replying: the text rules and the `idempotency_key`.
+`al wait --help` SHALL describe receiving: one JSON line per event, the nested format, the stable `id` and that the last event may repeat once after a restart, that missed events arrive first, and deleted events. `al send --help` SHALL describe replying: the text rules and the `idempotency_key`. `al status --help` SHALL describe the check: that it calls `GET /alp/v1/link` without connecting, the output fields, `unread_count`, and the `check` values.
 
 #### Scenario: Receiving details
 - **WHEN** the agent runs `al wait --help`
@@ -173,6 +200,10 @@ The service SHALL serve agent-facing install instructions (`install.md`) at the 
 #### Scenario: Replying details
 - **WHEN** the agent runs `al send --help`
 - **THEN** it describes the text rules and the `idempotency_key`
+
+#### Scenario: Status details
+- **WHEN** the agent runs `al status --help`
+- **THEN** it says that the command only asks the service (it does not connect or make the Link online) and describes the output fields, `unread_count`, and the `check` values
 
 ### Requirement: Link key help
 The Link key section of `al help` SHALL show only the example for the current operating system (macOS: the Keychain only; Linux: the Secret Service plus a file readable only by the user as a fallback; other systems: the file) and SHALL always say "If your environment has a safer way to guard credentials, use it instead."
