@@ -49,23 +49,6 @@ The text of a message SHALL have 1 to 4,000 Unicode code points (scalar values) 
 - **WHEN** a text holds 4,000 emoji, each one code point
 - **THEN** it is valid, and one more makes it too long
 
-### Requirement: Delivery retention
-The service SHALL keep each message of the user available for delivery to Assistant Links for 7 days after it was sent (the delivery retention), a single service setting. An Assistant Link SHALL NOT receive a message older than the delivery retention. The Timeline SHALL keep every message until the account is purged, regardless of the delivery retention.
-
-#### Scenario: Within the retention
-- **WHEN** a message was sent 6 days ago and an Assistant Link of the Assistant connects now for the first time since
-- **THEN** the Assistant Link receives it
-
-#### Scenario: Past the retention
-- **WHEN** a message was sent 8 days ago and no Assistant Link acknowledged it
-- **THEN** no Assistant Link receives it
-- **AND** the Timeline still shows it
-
-#### Scenario: Retention passes while in flight
-- **WHEN** a message is in flight, unacknowledged, and the retention passes before the service resends it
-- **THEN** the service drops it instead of resending, the cursor does not move, and it delivers the next deliverable event
-- **AND** a `result` for the dropped message that arrives later is still its acknowledgement (see "Acknowledgement after the retention")
-
 ### Requirement: Delivery to every Assistant Link
 The service SHALL deliver each message of the user to every Assistant Link of the Assistant, in the order the messages were stored, as an event of type `text_message`. An Assistant Link SHALL receive only messages sent after it was paired: its cursor starts, in the pairing transaction, at the Assistant's last event sequence. An unpaired Assistant Link has no token and no connection, so it receives nothing.
 
@@ -90,7 +73,7 @@ The service SHALL deliver each message of the user to every Assistant Link of th
 - **THEN** "Link 3" may or may not receive it, and either outcome is correct
 
 ### Requirement: Delivery cursor and catch-up
-The service SHALL keep one cursor per Assistant Link: the last event the Assistant Link acknowledged. It SHALL send an Assistant Link one unacknowledged event at a time, in order, and only the acknowledgement SHALL advance the cursor. When an Assistant Link connects, the service SHALL send it, in order, every deliverable event after its cursor that is within the delivery retention. The agent SHALL NOT need to remember a position.
+The service SHALL keep one cursor per Assistant Link: the last event the Assistant Link acknowledged. It SHALL send an Assistant Link one unacknowledged event at a time, in order, and only the acknowledgement SHALL advance the cursor. When an Assistant Link connects, the service SHALL send it, in order, every deliverable event after its cursor. The agent SHALL NOT need to remember a position.
 
 #### Scenario: Catch up after being offline
 - **WHEN** "Link 1" is offline while the user sends "a", "b", and "c", and then connects
@@ -153,8 +136,16 @@ The app SHALL show each of the user's messages as "Sending…" until the post to
 - **WHEN** a message became delivered while the app was closed and the user opens the conversation
 - **THEN** it shows its current state
 
+#### Scenario: Never taken
+- **WHEN** the service stored a message and no Assistant Link has ever acknowledged it
+- **THEN** it keeps showing "Sent"
+
+#### Scenario: First acknowledgement wins
+- **WHEN** "Link 1" and then "Link 2" acknowledge the same message
+- **THEN** `delivered_at` holds the time of "Link 1"'s acknowledgement and "Link 2"'s changes nothing
+
 ### Requirement: Not Delivered messages
-A message SHALL show a red exclamation mark to the right of its bubble and the red caption "Not Delivered" only for a real failure: the service answered the post with an error, or the post failed for a real network reason (connection lost, the system request timeout); or no Assistant Link acknowledged it within the delivery retention. An offline Assistant SHALL NOT make a message Not Delivered. Tapping a message the app could not send SHALL offer "Try Again" and "Cancel".
+A message SHALL show a red exclamation mark to the right of its bubble and the red caption "Not Delivered" only for a real failure: the service answered the post with an error, or the post failed for a real network reason (connection lost, the system request timeout). An offline Assistant, or a stored message no Assistant Link has taken, SHALL NOT make a message Not Delivered. Tapping a message the app could not send SHALL offer "Try Again" and "Cancel".
 
 #### Scenario: Service not reachable
 - **WHEN** the user sends a message and the app cannot reach the service
@@ -167,27 +158,6 @@ A message SHALL show a red exclamation mark to the right of its bubble and the r
 #### Scenario: Slow response
 - **WHEN** the service takes a long time to answer and the system request has not timed out
 - **THEN** the message keeps showing "Sending…"
-
-### Requirement: Not Delivered after the delivery retention
-A message of the user that no Assistant Link acknowledged (`delivered_at` null) and that is older than the delivery retention SHALL be Not Delivered. The service SHALL derive this when it returns the message, not store it or run a job for it. The message SHALL show "Not Delivered", be final, and offer no "Try Again".
-
-The service SHALL record when the first Assistant Link acknowledged a message (`delivered_at`); only the first acknowledgement sets it, also after the retention.
-
-#### Scenario: Past the retention
-- **WHEN** no Assistant Link acknowledged a message and it is older than the delivery retention
-- **THEN** the service returns it as Not Delivered and the message shows "Not Delivered" without "Try Again"
-
-#### Scenario: Delivered in time
-- **WHEN** an Assistant Link acknowledges a message on the last day of the delivery retention
-- **THEN** the message is Delivered and never shows "Not Delivered"
-
-#### Scenario: Acknowledgement after the retention
-- **WHEN** a message is older than the delivery retention, the service dropped it from flight for that reason, and a `result` for it from an Assistant Link arrives later
-- **THEN** `delivered_at` is set (first write wins), the message is Delivered, the service sends `event.updated`, and the cursor advances with the monotonic update
-
-#### Scenario: First acknowledgement wins
-- **WHEN** "Link 1" and then "Link 2" acknowledge the same message
-- **THEN** `delivered_at` holds the time of "Link 1"'s acknowledgement and "Link 2"'s changes nothing
 
 ### Requirement: Retry a message the app could not send
 Each message the app sends SHALL carry an `idempotency_key`, a UUIDv7 string the service returns in the message so the app can match its local bubble to the stored one. The user SHALL be able to retry a message the app could not send by posting it again with the same `idempotency_key`. If the service had stored the first request, it SHALL return the stored message with `200` and store nothing new, even if its text was deleted (same Assistant, text not compared); otherwise it SHALL store it then.
@@ -267,10 +237,6 @@ The service SHALL store every item of an Assistant's Timeline as an event until 
 #### Scenario: History survives relaunch
 - **WHEN** the user exchanged messages with "Hermes" and relaunches the app
 - **THEN** the conversation with "Hermes" shows the same messages in the same order
-
-#### Scenario: History outlives the delivery retention
-- **WHEN** the user sent a message 30 days ago
-- **THEN** the conversation still shows it
 
 #### Scenario: Another account's messages
 - **WHEN** account A requests the messages of an Assistant that belongs to account B

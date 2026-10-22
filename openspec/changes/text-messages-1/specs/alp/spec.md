@@ -56,7 +56,7 @@ The agent SHALL acknowledge an event by answering `event.deliver` with the resul
 - **THEN** nothing changes: the cursor does not move back, `delivered_at` keeps its time, and `event.updated` is not sent again
 
 ### Requirement: Failed and unusable responses
-An error response or no response within 30 seconds SHALL mean only that the attempt failed; a late error after the event is acknowledged changes nothing. A result whose `event_id` is unknown, belongs to another Link's Assistant, or is not deliverable to this Assistant Link (a type never delivered, `link_created`, or a `seq` at or below the Link's starting position at pairing) SHALL be ignored, with no error code. The delivery retention does not make an event undeliverable.
+An error response or no response within 30 seconds SHALL mean only that the attempt failed; a late error after the event is acknowledged changes nothing. A result whose `event_id` is unknown, belongs to another Link's Assistant, or is not deliverable to this Assistant Link (a type never delivered, `link_created`, or a `seq` at or below the Link's starting position at pairing) SHALL be ignored, with no error code.
 
 #### Scenario: Late error
 - **WHEN** an error response for an event arrives after the event was acknowledged
@@ -66,12 +66,8 @@ An error response or no response within 30 seconds SHALL mean only that the atte
 - **WHEN** a `result` carries an `event_id` that is unknown, belongs to another Link's Assistant, is a `link_created` event, or has a `seq` at or below the Link's starting position at pairing
 - **THEN** the service ignores it, advances nothing, and keeps the connection open
 
-#### Scenario: Result for an event past the retention
-- **WHEN** a `result` carries the `event_id` of a user message the delivery retention already dropped
-- **THEN** the event is acknowledged: the cursor advances and `delivered_at` is set
-
 ### Requirement: Event order, cursor, and catch-up
-For each Assistant Link the service SHALL send one `event.deliver` request at a time, in event order, and SHALL send the next only after the agent acknowledged the previous one. Acknowledgement SHALL advance the cursor the service keeps for that Assistant Link; the agent SHALL NOT send or keep a position. After `connection.ready`, the service SHALL send the events after the cursor that are within the delivery retention.
+For each Assistant Link the service SHALL send one `event.deliver` request at a time, in event order, and SHALL send the next only after the agent acknowledged the previous one. Acknowledgement SHALL advance the cursor the service keeps for that Assistant Link; the agent SHALL NOT send or keep a position. After `connection.ready`, the service SHALL send the events after the cursor.
 
 #### Scenario: One at a time
 - **WHEN** three events are waiting for an Assistant Link
@@ -101,7 +97,7 @@ An agent that does not implement `event.deliver` SHALL respond with `-32601`. An
 
 #### Scenario: Agent without event support
 - **WHEN** an agent that does not implement `event.deliver` responds with `-32601`
-- **THEN** the connection stays open and the cursor does not advance, and the Assistant Link receives the events once it runs a version that supports them, if they are within the delivery retention
+- **THEN** the connection stays open and the cursor does not advance, and the Assistant Link receives the events once it runs a version that supports them
 
 ### Requirement: Retry target
 The service SHALL send an unacknowledged event to the Assistant Link's next-newest connection that has not failed it; when every open connection failed it, again after 30 seconds, doubling after each failed round up to 5 minutes, and at once, resetting the wait, when a new connection opens.
@@ -154,15 +150,15 @@ The service SHALL expose `POST /alp/v1/messages`, authenticated by a Link token,
 - **THEN** the response is `409` with `idempotency_key_conflict` and nothing is stored
 
 ### Requirement: Read the Link's status
-The service SHALL expose `GET /alp/v1/link`, authenticated by a Link token with the same authentication and error rules as `POST /alp/v1/messages`, and respond `200` with `{"link_id", "assistant_name", "unread_count"}`: the number of the user's deliverable events after the Link's `last_read_seq` within the delivery retention. It SHALL only count: no event is read, delivered, or acknowledged, and the cursor, presence, and last active time do not change. It is additive within `/alp/v1`.
+The service SHALL expose `GET /alp/v1/link`, authenticated by a Link token with the same authentication and error rules as `POST /alp/v1/messages`, and respond `200` with `{"link_id", "assistant_name", "unread_count"}`: the number of the user's deliverable events after the Link's `last_read_seq`. It SHALL only count: no event is read, delivered, or acknowledged, and the cursor, presence, and last active time do not change. It is additive within `/alp/v1`.
 
 #### Scenario: Valid token
 - **WHEN** an agent calls `GET /alp/v1/link` with its Link token
 - **THEN** the response is `200` with `link_id`, `assistant_name`, and `unread_count`
 
 #### Scenario: Count of undelivered messages
-- **WHEN** the user has sent three messages after the Link's cursor, one of them older than the delivery retention, and the Assistant has a `link_created` event after the cursor
-- **THEN** `unread_count` is 2: the older message and `link_created` are not counted
+- **WHEN** the user has sent three messages after the Link's cursor, and the Assistant has a `link_created` event after the cursor
+- **THEN** `unread_count` is 3: `link_created` is not counted
 
 #### Scenario: Nothing changes
 - **WHEN** an agent calls `GET /alp/v1/link` for an offline Link with undelivered messages
