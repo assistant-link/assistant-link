@@ -2,7 +2,6 @@
 
 ### Requirement: Send a message to the Assistant
 The user SHALL send text from a composer, shown only while the Assistant has a paired Link.
-Send SHALL be disabled until the text is valid.
 The service SHALL store every accepted message, whether or not any Link is online.
 
 #### Scenario: Send while offline
@@ -43,8 +42,8 @@ A message SHALL stay deliverable until acknowledged, with no time limit.
 
 ### Requirement: Delivery cursor and catch-up
 The service SHALL keep one cursor per Link: the last event it acknowledged.
-Only an acknowledgement advances the cursor, never backward.
-On connect, it SHALL send every deliverable event after the cursor.
+Only an acknowledgement advances it, never backward.
+On connect, the service SHALL send every deliverable event after the cursor.
 Only the user's `text_message` events are deliverable, deleted ones included.
 
 #### Scenario: Catch up and resume
@@ -98,20 +97,19 @@ It SHALL NOT deliver it to the Assistant's Links.
 ### Requirement: Live notification of stored messages
 The service SHALL send `event.created` with `{"event": event}` to every app connection of the account for every stored `text_message`, the user's too.
 `event.updated` has the same shape when a user message gets `delivered_at`.
-The sending app SHALL match `event.created` to its local bubble by `idempotency_key`.
 
 #### Scenario: User's message on the live connection
 - **WHEN** the user's app sends a message
-- **THEN** every app connection receives `event.created`, and the sender matches it to its "Sending…" bubble
+- **THEN** every app connection receives `event.created`, and the sender matches it to its "Sending…" bubble by `idempotency_key`
 
 ### Requirement: Message history
 The service SHALL keep every Timeline item as an event until the account is purged.
-An event has `id`, `type`, `created_at`, `deleted`, and its content under a key named after the type.
-The app API adds `assistant_id`, `sender`, `link_id`, `delivery_status` (`sent` or `delivered`), and `idempotency_key`.
+The app API event is `{"id", "assistant_id", "type", "sender", "link_id", "created_at", "deleted", "delivery_status", "idempotency_key", "<type>": {...}}`.
+`delivery_status` is `sent` or `delivered`.
 
 #### Scenario: Event shape in the app
 - **WHEN** the app loads the user's message "Hi"
-- **THEN** the event is `{"id", "assistant_id", "type": "text_message", "sender": "user", "link_id": null, "created_at", "deleted": false, "delivery_status", "idempotency_key", "text_message": {"text": "Hi"}}`
+- **THEN** the event has `"type": "text_message"`, `"sender": "user"`, `"link_id": null`, `"deleted": false`, and `"text_message": {"text": "Hi"}`
 
 #### Scenario: Link created event
 - **WHEN** a Link is created for "Hermes", paired or not

@@ -34,7 +34,7 @@ One table, `assistant_events`. Payload in `text_messages(event_id primary key, t
 - `id` is a UUIDv7. `created_at` is `inserted_at`.
 - `type`: `link_created` or `text_message`. `sender`: `user`, `assistant`, or `system`.
 - `seq` is per Assistant, from `UPDATE assistants SET last_event_seq = last_event_seq + 1 … RETURNING` in the insert transaction.
-- A deleted payload leaves a deleted event (LEFT JOIN). This slice cannot delete one.
+- A deleted payload leaves a deleted event. This slice cannot delete one.
 - A repeated idempotency key rolls back (undoing the `seq` bump) and returns the stored event: `200` or `409`, never `500`.
 - `link_created` has sender `system`, is never delivered, and is backfilled for existing Links (UUIDv7 from the Link's creation time).
 
@@ -59,9 +59,6 @@ It runs on connect, on an "event stored" PubSub notice, on each ack, and when th
 Its query: `seq > last_read_seq`, sender `user`, type `text_message`, lowest `seq`, limit 1.
 `GET /alp/v1/link` counts the same query over HTTP, so no connection flickers the Link online.
 
-### Client API
-`POST /api/v1/assistants/:id/messages` checks `no_paired_link` in the storing transaction.
-
 ### `al send` and `al wait`
 - `al send` makes one HTTP attempt: a rerun after exit 5 may duplicate. Exit 4 now means any rejection.
 - `al wait` prints JSON Lines in both modes; `--human` changes only stderr.
@@ -74,7 +71,7 @@ Its query: `seq > last_read_seq`, sender `user`, type `text_message`, lowest `se
 - A leaked Link token can post as the Assistant, read from its cursor on, and set `delivered_at`.
 
 ### UI designs
-`designs/` holds PNG exports and a `.fig` file. If they disagree with the specs, the specs win.
+`designs/` holds the mockups. If they disagree with the specs, the specs win.
 
 ![Overview](designs/overview.png)
 

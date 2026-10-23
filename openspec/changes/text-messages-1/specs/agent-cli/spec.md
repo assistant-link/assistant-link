@@ -110,7 +110,7 @@ While a write is pending it SHALL answer further `event.deliver` with `-32001` (
 It SHALL remember the last id written and acknowledge a repeat of it without writing.
 
 #### Scenario: Nothing reads standard output
-- **WHEN** the reader stopped reading (full pipe) and a message arrives
+- **WHEN** the reader stopped reading and a message arrives
 - **THEN** the write stays pending and the message is not acknowledged
 - **AND** further events get `-32001` `not_received`, and the Link stays online
 
@@ -148,7 +148,7 @@ Without a text it SHALL report a usage error.
 ### Requirement: Usage help
 `al help` SHALL be short and general: each command in one line, the flow (`al wait` to stay online, `al send` to reply),
 a short Link key section, and "run `al <command> --help` for details".
-`al wait --help` SHALL describe the event line, the stable `id` (the last event may repeat once), and missed events first.
+`al wait --help` SHALL describe the event line and missed events first.
 `al send --help` SHALL describe the text rules and `idempotency_key`.
 `al status --help` SHALL describe the output fields and `check` values.
 

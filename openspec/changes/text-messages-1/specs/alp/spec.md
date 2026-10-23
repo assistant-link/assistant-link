@@ -19,14 +19,14 @@ While the connection is open the Assistant Link SHALL count as online.
 
 ### Requirement: Event delivery request
 The service SHALL deliver an event as the request `event.deliver`, whose params are the event:
-`id`, `type`, `created_at` (RFC 3339 UTC), `deleted`, and the content under a key named after the type (`text_message`: `{"text"}`).
+`id`, `type`, `created_at` (RFC 3339 UTC), `deleted`, and the content under a key named after the type.
 A deleted event has no content key.
 Per Link, one `event.deliver` is in flight at a time, in event order.
 An agent SHALL ignore fields and types it does not know.
 
 #### Scenario: Message delivered
 - **WHEN** the user sends "Hi" to an Assistant with an online Link
-- **THEN** the agent receives `{"jsonrpc": "2.0", "id": ..., "method": "event.deliver", "params": {"id": ..., "type": "text_message", "created_at": ..., "deleted": false, "text_message": {"text": "Hi"}}}`
+- **THEN** the agent receives `event.deliver` with params `{"id", "type": "text_message", "created_at", "deleted": false, "text_message": {"text": "Hi"}}`
 
 ### Requirement: JSON-RPC request ids
 Each side SHALL number its own requests with a per-connection counter.
@@ -62,7 +62,7 @@ An unusable `event_id` SHALL be ignored, with no error.
 ### Requirement: Delivery errors and duplicates
 An agent without `event.deliver` SHALL answer `-32601`.
 An agent that cannot take an event SHALL answer `-32001` with `data.reason` `not_received`.
-An error, a closed connection, or no response within 30 seconds means only that the attempt failed.
+An error, a closed connection, or no response within 30 seconds only fails the attempt.
 The service SHALL then send the event again with the same `id`.
 Delivery is at least once; a reader that must not see an event twice dedupes by `id`.
 
@@ -90,7 +90,7 @@ Bad text gets `422` (see `messages`) and nothing is stored.
 - **THEN** the response is `201` with `message_id` and `created_at`, and the Link stays offline
 
 ### Requirement: Idempotent send
-`POST /alp/v1/messages` SHALL accept an optional `idempotency_key`, a UUIDv7; a malformed one gets `422` `invalid_params`.
+`idempotency_key` SHALL be a UUIDv7; a malformed one gets `422` `invalid_params`.
 A repeated key gets `200` with the stored `{"message_id", "created_at"}`, even for a deleted message.
 A repeated key with different text gets `409` `idempotency_key_conflict`.
 
