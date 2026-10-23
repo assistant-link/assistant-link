@@ -72,7 +72,7 @@ Tapping it SHALL offer "Try Again" and "Cancel".
 - **THEN** the message shows the red "!" and "Not Delivered"
 
 ### Requirement: Retry a message the app could not send
-Each app message SHALL carry an `idempotency_key`, a UUIDv7. Otherwise `422` `invalid_params`.
+Each app message SHALL carry an `idempotency_key`, a UUIDv7 unique per account. Otherwise `422` `invalid_params`.
 "Try Again" SHALL post again with the same key.
 A stored key gets the stored event with `200` and stores nothing, even if its text was deleted.
 A key reused with a different text or Assistant gets `409` `idempotency_key_conflict`.
@@ -105,7 +105,7 @@ The service SHALL send `event.created` with `{"event": event}` to every app conn
 ### Requirement: Message history
 The service SHALL keep every Timeline item as an event until the account is purged.
 The app API event is `{"id", "assistant_id", "type", "sender", "link_id", "created_at", "deleted", "delivery_status", "idempotency_key", "<type>": {...}}`.
-`delivery_status` is `sent` or `delivered`.
+`delivery_status` is `sent` or `delivered` on the user's `text_message` events.
 
 #### Scenario: Event shape in the app
 - **WHEN** the app loads the user's message "Hi"
@@ -117,9 +117,9 @@ The app API event is `{"id", "assistant_id", "type", "sender", "link_id", "creat
 - **AND** an existing Link gets one on upgrade, dated at its creation
 
 ### Requirement: Event history endpoint
-`GET /api/v1/assistants/:id/events` SHALL return `events` (oldest first) and `has_more`.
-It takes `limit` (default 50, max 100) and `before`.
-An unknown `before` is `422` `invalid_params`. Another account's Assistant is `404`.
+`GET /api/v1/assistants/:id/events` SHALL return `events` (oldest first, by `seq`) and `has_more`.
+It takes `limit` (default 50, max 100) and `before`, an event id resolved to its `seq`.
+An unknown `before`, or one of another Assistant, is `422` `invalid_params`. Another account's Assistant is `404`.
 
 #### Scenario: Paging
 - **WHEN** the app requests 50 events before a known event

@@ -90,7 +90,7 @@ Bad text gets `422` (see `messages`) and nothing is stored.
 - **THEN** the response is `201` with `message_id` and `created_at`, and the Link stays offline
 
 ### Requirement: Idempotent send
-`idempotency_key` SHALL be a UUIDv7; a malformed one gets `422` `invalid_params`.
+`idempotency_key` SHALL be a UUIDv7, unique per Assistant Link; a malformed one gets `422` `invalid_params`.
 A repeated key gets `200` with the stored `{"message_id", "created_at"}`, even for a deleted message.
 A repeated key with different text gets `409` `idempotency_key_conflict`.
 

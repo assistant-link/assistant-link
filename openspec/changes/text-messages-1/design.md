@@ -35,6 +35,7 @@ One table, `assistant_events`. Payload in `text_messages(event_id primary key, t
 - `type`: `link_created` or `text_message`. `sender`: `user`, `assistant`, or `system`.
 - `seq` is per Assistant, from `UPDATE assistants SET last_event_seq = last_event_seq + 1 … RETURNING` in the insert transaction.
 - A deleted payload leaves a deleted event. This slice cannot delete one.
+- `no_paired_link` is checked inside the storing transaction.
 - A repeated idempotency key rolls back (undoing the `seq` bump) and returns the stored event: `200` or `409`, never `500`.
 - `link_created` has sender `system`, is never delivered, and is backfilled for existing Links (UUIDv7 from the Link's creation time).
 
