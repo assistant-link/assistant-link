@@ -11,5 +11,5 @@ description = "Clone backend, cli, and apple into components/"
 run = "scripts/clone"
 
 [tasks."test:integration"]
-description = "Run the cross-repo smoke test against a local backend"
+description = "Run the cross-repo integration tests against a local backend"
 run = "tests/integration/smoke.sh"
