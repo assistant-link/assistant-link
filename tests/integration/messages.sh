@@ -53,7 +53,7 @@ exits() {
 
 texts() { jq -r .text_message.text "$work/$1.out" | paste -sd, -; }
 delivery_status() { api GET "/assistants/$1/events" | jq -r --arg id "$2" '.events[] | select(.id == $id) | .delivery_status'; }
-unread() { AL_LINK_KEY="$(<"$work/$1.key")" "$al" status | jq -r .unread_count; }
+unread() { AL_LINK_KEY="$(<"$work/$1.key")" "$al" status | jq -er .unread_count || echo -1; }
 long_text() { head -c "$1" /dev/zero | tr '\0' x; }
 
 test_delivery() {
@@ -180,7 +180,7 @@ test_status() {
 
 sql() { psql "${DATABASE_URL/ecto:/postgres:}" -Atc "$1"; }
 
-# How many rows of the account ($1), and its users, the database still holds.
+# How many rows of the account ($1) the database still holds.
 rows() {
   sql "select (select count(*) from assistants where account_id = '$1')
     + (select count(*) from assistant_links where account_id = '$1')
@@ -188,18 +188,17 @@ rows() {
     + (select count(*) from text_messages where account_id = '$1')
     + (select count(*) from devices where account_id = '$1')
     + (select count(*) from memberships where account_id = '$1')
-    + (select count(*) from accounts where id = '$1')
-    + (select count(*) from users where id in (select user_id from memberships where account_id = '$1'))"
+    + (select count(*) from accounts where id = '$1')"
 }
 
 test_account_deletion() {
   step "5.5 a deleted account is unreachable at once, and gone after the purge"
-  new_account
-  local other_account assistant unpaired unused_code deleted_account
+  local other_account assistant unpaired unused_code deleted_account user_id
   new_account
   other_account=$account_id
   new_account
   deleted_account=$account_id
+  user_id="$(sql "select user_id from memberships where account_id = '$deleted_account'")"
   assistant="$(new_assistant)"
   pair_link "$assistant" deleted
   send "$assistant" "Hi" >/dev/null
@@ -227,5 +226,6 @@ test_account_deletion() {
       AssistantLink.Accounts.purge_deleted_accounts()'
   ) >"$work/purge.log" 2>&1 || fail "purge failed: $(tail -n 5 "$work/purge.log")"
   [[ "$(rows "$deleted_account")" -eq 0 ]] || fail "rows are left after the purge"
+  [[ "$(sql "select count(*) from users where id = '$user_id'")" -eq 0 ]] || fail "the user is left after the purge"
   [[ "$(rows "$other_account")" -gt 0 ]] || fail "the purge deleted another account"
 }
