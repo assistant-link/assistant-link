@@ -56,7 +56,7 @@ An unusable `event_id` SHALL be ignored, with no error.
 - **THEN** "Link 2"'s cursor advances, while `delivered_at` keeps "Link 1"'s time and `event.updated` is not sent again
 
 #### Scenario: Unusable event_id
-- **WHEN** a result carries an `event_id` that is unknown, of another Assistant, a `link_created` event, or at or below the Link's starting position at pairing
+- **WHEN** a result carries an `event_id` that is unknown, of another Assistant, or a `link_created` event
 - **THEN** the service advances nothing and keeps the connection open
 
 ### Requirement: Delivery errors and duplicates
@@ -64,11 +64,23 @@ An agent without `event.deliver` SHALL answer `-32601`.
 An agent that cannot take an event SHALL answer `-32001` with `data.reason` `not_received`.
 An error, a closed connection, or no response within 30 seconds only fails the attempt.
 The service SHALL then send the event again with the same `id`.
-Delivery is at least once; a reader that must not see an event twice dedupes by `id`.
 
 #### Scenario: Agent cannot take the event
 - **WHEN** an agent answers `-32001` `not_received` or `-32601`
 - **THEN** the cursor does not advance, the connection stays open, and the event is sent again later
+
+### Requirement: At-least-once delivery
+The service MAY send an event more than once.
+The agent (the Link) SHALL de-duplicate, by the event `id`.
+The service does not de-duplicate for the agent.
+For messages the agent sends, the service de-duplicates by `idempotency_key`.
+Acknowledging an event at or below the Link's cursor SHALL change nothing.
+That is expected, and harmless.
+
+#### Scenario: Acknowledged again
+- **WHEN** the service sent an event twice, and the agent acknowledges both copies
+- **THEN** the first moves the cursor, and `delivered_at` is set once
+- **AND** the second changes nothing and gets no error
 
 ### Requirement: Retry target
 The service SHALL send an unacknowledged event to the Link's next-newest connection that has not failed it.
@@ -90,7 +102,7 @@ Bad text gets `422` (see `messages`) and nothing is stored.
 - **THEN** the response is `201` with `message_id` and `created_at`, and the Link stays offline
 
 ### Requirement: Idempotent send
-`idempotency_key` SHALL be a UUIDv7, unique per Assistant Link; a malformed one gets `422` `invalid_params`.
+`idempotency_key` SHALL be a UUIDv7, unique per account; a malformed one gets `422` `invalid_params`.
 A repeated key gets `200` with the stored `{"message_id", "created_at"}`, even for a deleted message.
 A repeated key with different text gets `409` `idempotency_key_conflict`.
 

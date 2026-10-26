@@ -78,7 +78,8 @@ Its query: `seq > last_read_seq`, sender `user`, type `text_message`, lowest `se
 
 ## Risks / Trade-offs
 
-- A lost ack redelivers; agents dedupe by `id`.
+- Delivery is at least once. A lost or late ack redelivers; the Link dedupes by event `id`, the service does not.
+- An ack at or below the cursor is expected and does nothing.
 - A message typed before pairing never reaches that Link.
 
 ## Migration Plan
