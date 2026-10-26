@@ -6,6 +6,7 @@ new_account() {
   credential=""
   account="$(api POST /accounts)"
   credential="$(jq -r .credential <<<"$account")"
+  account_id="$(jq -r .account_id <<<"$account")"
 }
 
 new_assistant() {
@@ -44,10 +45,10 @@ stop_wait() {
   wait "$1" || fail "al wait exited $? on SIGINT"
 }
 
-# Runs a command and leaves its exit code in $code.
+# Runs a command; its exit code is in $code and its output in $work/exits.out.
 exits() {
   code=0
-  "$@" >/dev/null || code=$?
+  "$@" >"$work/exits.out" || code=$?
 }
 
 texts() { jq -r .text_message.text "$work/$1.out" | paste -sd, -; }
@@ -194,10 +195,11 @@ rows() {
 test_account_deletion() {
   step "5.5 a deleted account is unreachable at once, and gone after the purge"
   new_account
-  local other_account deleted_account assistant unpaired unused_code
-  other_account="$(jq -r .account_id <<<"$account")"
+  local other_account assistant unpaired unused_code deleted_account
   new_account
-  deleted_account="$(jq -r .account_id <<<"$account")"
+  other_account=$account_id
+  new_account
+  deleted_account=$account_id
   assistant="$(new_assistant)"
   pair_link "$assistant" deleted
   send "$assistant" "Hi" >/dev/null
@@ -209,7 +211,8 @@ test_account_deletion() {
   api DELETE /account
 
   exits wait "$waiter"; [[ $code -eq 4 ]] || fail "al wait did not exit 4 after the account was deleted"
-  exits "$al" status --key-file "$work/deleted.key"; [[ $code -eq 4 ]] || fail "al status was not rejected"
+  exits "$al" status --key-file "$work/deleted.key"
+  [[ $code -eq 4 && "$(jq -r .check "$work/exits.out")" == "rejected" ]] || fail "al status: $code $(<"$work/exits.out")"
   exits "$al" send --key-file "$work/deleted.key" "Hi"; [[ $code -eq 4 ]] || fail "al send was not rejected"
   exits "$al" pair "$unused_code" --key-file "$work/again.key"; [[ $code -eq 4 ]] || fail "al pair was not rejected"
   [[ "$(curl -s -o /dev/null -w '%{http_code}' "$service/api/v1/assistants" -H "authorization: Bearer $credential")" == 401 ]] ||
