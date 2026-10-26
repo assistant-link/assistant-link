@@ -33,10 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: scripts/clone
-        env:
-          # Set back to main when these merge.
-          ASSISTANT_LINK_BACKEND_REF: text-messages-1-delivery
-          ASSISTANT_LINK_CLI_REF: text-messages-1-cli
       # Each component's own pins, so the test builds them as their own CI does.
       - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
