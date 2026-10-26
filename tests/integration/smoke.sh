@@ -18,6 +18,7 @@ server_pid=""
 wait_pid=""
 cleanup() {
   [[ -n "$wait_pid" ]] && kill "$wait_pid" 2>/dev/null || true
+  kill $(jobs -p) 2>/dev/null || true
   [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null || true
   wait 2>/dev/null || true
   rm -rf "$work"
@@ -134,4 +135,13 @@ step "install.md"
 curl -fsS "$service/install.md" | grep -qF "https://github.com/assistant-link/cli" || fail "install.md does not point at assistant-link/cli"
 echo "served, installs al from assistant-link/cli"
 
-printf '\nSmoke test passed.\n'
+source "$(dirname "${BASH_SOURCE[0]}")/messages.sh"
+test_delivery
+test_catch_up
+test_two_links
+test_unread_stdout
+test_send
+test_status
+test_account_deletion
+
+printf '\nIntegration tests passed.\n'

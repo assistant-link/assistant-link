@@ -9,6 +9,9 @@ Usage: scripts/clone
 Clones backend, cli, and apple into components/, tracking main.
 Missing repositories are cloned; existing checkouts are left alone.
 
+ASSISTANT_LINK_BACKEND_REF, ASSISTANT_LINK_CLI_REF, and ASSISTANT_LINK_APPLE_REF
+choose the branch or tag to clone for that repository (default main).
+
 ASSISTANT_LINK_GIT_BASE overrides where repositories are cloned from
 (default https://github.com/assistant-link), for example git@github.com:assistant-link
 or the owner of your forks.
@@ -35,8 +38,10 @@ for repo in "${repos[@]}"; do
     echo "$repo: $dir exists but is not a git checkout, skipped" >&2
     status=1
   else
-    git clone --quiet "$base/$repo.git" "$dir"
-    echo "$repo: cloned $base/$repo.git"
+    ref_var="ASSISTANT_LINK_${repo^^}_REF"
+    ref="${!ref_var:-main}"
+    git clone --quiet --branch "$ref" "$base/$repo.git" "$dir"
+    echo "$repo: cloned $base/$repo.git at $ref"
   fi
 done
 exit "$status"
