@@ -45,9 +45,8 @@ CI runs it on every pull request and on every push to `main`, against the compon
 
 ## Adding a test
 
-Add a `test_*` function to `messages.sh` (or a new script sourced from `smoke.sh`) and call it at the end of
-`smoke.sh`, so every test shares the one backend start. Start with `new_account`, so the test depends on no other
-test's data, and stop every `al wait` it starts. Keep each test runnable locally with the same command CI uses.
+Add a `test_*` function to `messages.sh` and call it at the end of `smoke.sh`. Start with `new_account`, so the test
+depends on no other test's data, and stop every `al wait` it starts.
 
 `scripts/clone` takes `ASSISTANT_LINK_BACKEND_REF`, `ASSISTANT_LINK_CLI_REF`, and `ASSISTANT_LINK_APPLE_REF` (default
 `main`) to test unmerged branches.

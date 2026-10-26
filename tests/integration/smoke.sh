@@ -16,10 +16,9 @@ export DATABASE_URL="${DATABASE_URL:-ecto://postgres:postgres@localhost:5432/ass
 work="$(mktemp -d)"
 server_pid=""
 wait_pid=""
-pids=()
 cleanup() {
   [[ -n "$wait_pid" ]] && kill "$wait_pid" 2>/dev/null || true
-  ((${#pids[@]})) && kill "${pids[@]}" 2>/dev/null || true
+  kill $(jobs -p) 2>/dev/null || true
   [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null || true
   wait 2>/dev/null || true
   rm -rf "$work"
