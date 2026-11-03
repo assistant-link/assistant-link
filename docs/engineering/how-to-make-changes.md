@@ -7,9 +7,9 @@ The `main` branch of each repo must be releasable and stable, meaning it integra
 
 ## Multiple PRs
 
-If the change only spans one repository and is not linked to any openspec changes, open a single PR in the component's repo directly.
+If the change only spans one repository, open a single PR in the component's repo directly.
 
-If the change has openspec changes or is doing related work in several repositories, create a parent PR in assistant-link repo. If the change has no changes in assistant-link you can fall back to using a parent issue.
+If the change does related work in several repositories, create a parent PR in assistant-link repo. If the change has no changes in assistant-link you can fall back to using a parent issue.
 
 If the change needs multiple PRs, try to match the branch's name between `assistant-link` and the repos.
 
