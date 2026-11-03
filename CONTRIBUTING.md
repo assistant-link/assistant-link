@@ -8,9 +8,8 @@ how to set up a workspace with all of them ([getting started](https://github.com
 
 - For a bug, open an issue with what you did, what you expected, and what happened.
 - For a new feature or a change to a public contract (the Assistant Link Protocol, `al`'s commands and output), open an
-  issue first so we can agree on the approach before you write the code. Changes are proposed with
-  [OpenSpec](https://github.com/Fission-AI/OpenSpec) in the assistant-link repository's `openspec/`, including changes
-  to a single repository.
+  issue first so we can agree on the approach before you write the code. Plan a change as a short task list
+  (checkboxes) in the pull request description, write tests first, and keep pull requests small, stacked when useful.
 - For a security issue, do not open an issue. Follow
   [SECURITY.md](https://github.com/assistant-link/assistant-link/blob/main/SECURITY.md).
 

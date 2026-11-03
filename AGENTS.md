@@ -6,9 +6,8 @@ and quality gate; follow it when you work there.
 
 Follow [docs/engineering/how-to-make-changes.md](docs/engineering/how-to-make-changes.md) for how to make a change.
 
-- Every change is planned in this repository's `openspec/`, including a change to a single component, with tasks
-  grouped by repository. The component repositories have no `openspec/` of their own; run `openspec` from anywhere in
-  this workspace and it finds this one.
+- Plan every change as a short task list (checkboxes) in its pull request description, grouped by repository. Write
+  tests first and keep PRs small, stacked when useful.
 - `mise.toml` here pins every tool the components need. When a component changes a pin in its own `mise.toml`, change
   it here too.
 - `mise run test:integration` runs the components together (see `tests/integration/README.md`).
